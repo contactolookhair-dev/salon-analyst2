@@ -15,6 +15,7 @@ export {
   calcularVentasPorSucursal,
 } from "@/lib/finance/aggregations";
 export { calcularIVA, calcularNeto } from "@/lib/finance/tax";
+export { processParsedSale } from "@/lib/finance/processed-sale";
 export type {
   FinanceExpense,
   FinanceSale,
@@ -23,4 +24,3 @@ export type {
   SalesByProfessional,
   VentaUtilityBreakdown,
 } from "@/lib/finance/types";
-
