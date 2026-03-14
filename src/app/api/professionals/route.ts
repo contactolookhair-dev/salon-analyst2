@@ -6,6 +6,7 @@ import {
   getProfessionalsFromStorage,
   updateProfessionalInStorage,
 } from "@/server/database/business-repository";
+import type { Professional } from "@/shared/types/business";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,39 @@ function safeBranchIds(value: unknown) {
     (item): item is "house-of-hair" | "look-hair-extensions" =>
       item === "house-of-hair" || item === "look-hair-extensions"
   );
+}
+
+function buildProfessionalResponse(body: Record<string, unknown>): Professional {
+  const branchIds = safeBranchIds(body.branchIds);
+
+  return {
+    id: safeString(body.id) || safeString(body.name).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    name: safeString(body.name),
+    role: safeString(body.role) || "Profesional",
+    branchIds,
+    primaryBranchId:
+      body.primaryBranchId === "house-of-hair" ||
+      body.primaryBranchId === "look-hair-extensions"
+        ? body.primaryBranchId
+        : branchIds[0] ?? null,
+    active: safeBoolean(body.active, true),
+    commissionMode:
+      body.commissionMode === "percentage" ||
+      body.commissionMode === "fixed" ||
+      body.commissionMode === "mixed" ||
+      body.commissionMode === "none"
+        ? body.commissionMode
+        : "system_rules",
+    commissionValue: safeNumber(body.commissionValue) || undefined,
+    phone: safeString(body.phone) || undefined,
+    emergencyPhone: safeString(body.emergencyPhone) || undefined,
+    email: safeString(body.email) || undefined,
+    documentId: safeString(body.documentId) || undefined,
+    notes: safeString(body.notes) || undefined,
+    avatarColor: safeString(body.avatarColor) || undefined,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function GET() {
@@ -88,7 +122,11 @@ export async function POST(request: Request) {
       avatarColor: safeString(body.avatarColor) || undefined,
     });
 
-    return NextResponse.json({ success: true, data: result.professional });
+    return NextResponse.json({
+      success: true,
+      data: result.professional ?? buildProfessionalResponse(body),
+      fallback: result.fallback ?? false,
+    });
   } catch (error) {
     return NextResponse.json(
       {
@@ -143,7 +181,11 @@ export async function PATCH(request: Request) {
       avatarColor: safeString(body.avatarColor) || undefined,
     });
 
-    return NextResponse.json({ success: true, data: result.professional });
+    return NextResponse.json({
+      success: true,
+      data: result.professional ?? buildProfessionalResponse(body),
+      fallback: result.fallback ?? false,
+    });
   } catch (error) {
     return NextResponse.json(
       {
@@ -175,6 +217,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({
       success: true,
       data: result,
+      fallback: result.fallback ?? false,
       message: "El trabajador fue desactivado para conservar su historial y comisiones.",
     });
   } catch (error) {

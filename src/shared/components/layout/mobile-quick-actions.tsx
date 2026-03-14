@@ -1,15 +1,11 @@
 "use client";
 
 import { ArrowUp, RefreshCw } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-
-import { notifyBusinessSnapshotUpdated } from "@/shared/lib/business-snapshot-events";
+import { useEffect, useState } from "react";
 
 export function MobileQuickActions() {
-  const router = useRouter();
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -29,10 +25,8 @@ export function MobileQuickActions() {
   }
 
   function handleRefresh() {
-    startTransition(() => {
-      notifyBusinessSnapshotUpdated();
-      router.refresh();
-    });
+    setIsPending(true);
+    window.location.reload();
   }
 
   return (
