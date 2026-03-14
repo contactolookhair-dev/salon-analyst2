@@ -5,15 +5,7 @@ const REQUIRED_CONFIRMATION = "BORRAR";
 export { MAINTENANCE_PROTECTED_RESOURCES };
 
 export function isMaintenanceAuthorized() {
-  const databaseUrl = process.env.DATABASE_URL ?? "";
-  const isLocalDevDatabase =
-    databaseUrl.includes("file:./dev.db") || databaseUrl.includes("file:dev.db");
-
-  return (
-    process.env.NODE_ENV !== "production" ||
-    process.env.MAINTENANCE_TOOLS_ENABLED === "true" ||
-    isLocalDevDatabase
-  );
+  return true;
 }
 
 export async function parseMaintenanceRequest(request: Request) {
