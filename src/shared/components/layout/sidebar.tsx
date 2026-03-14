@@ -28,15 +28,15 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-full flex-col rounded-[32px] border border-white/60 bg-olive-950 px-5 py-6 text-white shadow-panel">
+    <aside className="flex h-full flex-col rounded-[32px] border border-[var(--theme-border)] bg-[var(--theme-sidebar-bg)] px-5 py-6 text-[var(--theme-sidebar-text)] shadow-[var(--theme-shell-shadow)] transition-colors">
       <div className="border-b border-white/10 pb-5">
-        <p className="text-xs uppercase tracking-[0.28em] text-white/50">
+        <p className="text-xs uppercase tracking-[0.28em] text-[var(--theme-sidebar-muted)]">
           SalonAnalyst2
         </p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
           Financial Control
         </h2>
-        <p className="mt-2 text-sm text-white/60">
+        <p className="mt-2 text-sm text-[var(--theme-sidebar-muted)]">
           Plataforma base para análisis premium de salones.
         </p>
       </div>
@@ -53,8 +53,8 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
                 isActive
-                  ? "bg-white text-olive-950 shadow-soft"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-[var(--theme-sidebar-active-bg)] text-[var(--theme-sidebar-active-text)] shadow-soft"
+                  : "text-[var(--theme-sidebar-muted)] hover:bg-white/10 hover:text-[var(--theme-sidebar-text)]"
               )}
             >
               <Icon className="size-4" />
@@ -65,11 +65,11 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-white/40">
+        <p className="text-xs uppercase tracking-[0.24em] text-[var(--theme-sidebar-muted)]">
           Estado
         </p>
         <p className="mt-2 text-lg font-semibold">Base inicial lista</p>
-        <p className="mt-2 text-sm text-white/60">
+        <p className="mt-2 text-sm text-[var(--theme-sidebar-muted)]">
           Estructura preparada para ventas, gastos, estadísticas e IA.
         </p>
       </div>

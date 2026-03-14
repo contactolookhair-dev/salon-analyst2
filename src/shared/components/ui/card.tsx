@@ -10,7 +10,7 @@ export function Card({ children, className }: CardProps) {
   return (
     <article
       className={cn(
-        "rounded-[28px] border border-white/60 bg-white/70 p-6 shadow-panel backdrop-blur-xl",
+        "rounded-[28px] border border-[var(--theme-border)] bg-[var(--theme-card)] p-6 shadow-[var(--theme-card-shadow)] backdrop-blur-xl",
         className
       )}
     >
@@ -18,4 +18,3 @@ export function Card({ children, className }: CardProps) {
     </article>
   );
 }
-

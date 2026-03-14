@@ -11,12 +11,12 @@ export function BranchSelector() {
 
   return (
     <div className="relative">
-      <MapPin className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-olive-700" />
+      <MapPin className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-[var(--theme-header-eyebrow)]" />
       <select
         aria-label="Seleccionar sucursal"
         className={cn(
-          "w-full appearance-none rounded-2xl border border-white/60 bg-white/80 py-3 pl-11 pr-12 text-sm font-medium text-olive-950 shadow-soft backdrop-blur-sm outline-none transition",
-          "hover:border-olive-700/20 focus:border-olive-700/40"
+          "w-full appearance-none rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] py-3 pl-11 pr-12 text-sm font-medium text-[var(--theme-text)] shadow-soft backdrop-blur-sm outline-none transition",
+          "hover:border-[var(--theme-accent)]/35 focus:border-[var(--theme-accent)]/45"
         )}
         value={branch}
         onChange={(event) => setBranch(event.target.value as typeof branch)}
@@ -28,7 +28,7 @@ export function BranchSelector() {
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-olive-700" />
+      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[var(--theme-header-eyebrow)]" />
     </div>
   );
 }

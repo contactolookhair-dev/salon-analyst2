@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { BranchFilter } from "@/shared/types/business";
+import { getBranchTheme, type BranchTheme } from "@/shared/lib/branch-theme";
 
 const BRANCH_SELECTION_STORAGE_KEY = "salon-analyst2-selected-branch";
 
@@ -24,6 +25,7 @@ function isValidBranchFilter(value: string | null): value is BranchFilter {
 type BranchContextValue = {
   branch: BranchFilter;
   setBranch: (branch: BranchFilter) => void;
+  theme: BranchTheme;
 };
 
 const BranchContext = createContext<BranchContextValue | null>(null);
@@ -53,10 +55,16 @@ export function BranchProvider({ children }: PropsWithChildren) {
     }
   }, [branch]);
 
+  useEffect(() => {
+    document.documentElement.dataset.branchTheme = branch;
+    document.body.dataset.branchTheme = branch;
+  }, [branch]);
+
   const value = useMemo(
     () => ({
       branch,
       setBranch,
+      theme: getBranchTheme(branch),
     }),
     [branch]
   );
