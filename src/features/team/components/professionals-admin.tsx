@@ -7,7 +7,6 @@ import { branches } from "@/features/branches/data/mock-branches";
 import {
   loadBrowserProfessionals,
   mergeProfessionals,
-  removeBrowserProfessional,
   saveBrowserProfessionals,
   upsertBrowserProfessional,
 } from "@/features/team/lib/browser-professionals-storage";
@@ -227,15 +226,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       }
 
       if (payload.data) {
-        if (payload.fallback) {
-          upsertBrowserProfessional(payload.data as Professional);
-        } else {
-          saveBrowserProfessionals(
-            loadBrowserProfessionals().filter(
-              (professional) => professional.id !== payload.data?.id
-            )
-          );
-        }
+        upsertBrowserProfessional(payload.data as Professional);
 
         setProfessionals((currentProfessionals) =>
           mergeProfessionals(
@@ -306,24 +297,21 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
         throw new Error(payload.error ?? "No pude eliminar el profesional.");
       }
 
-      if (payload.fallback) {
-        const nextLocalProfessionals = loadBrowserProfessionals().map((item) =>
-          item.id === professional.id ? { ...item, active: false } : item
-        );
-        saveBrowserProfessionals(nextLocalProfessionals);
-        setProfessionals((currentProfessionals) =>
-          mergeProfessionals(
-            currentProfessionals.map((item) =>
-              item.id === professional.id ? { ...item, active: false } : item
-            ),
-            nextLocalProfessionals
-          )
-        );
-        notifyBusinessSnapshotUpdated();
-      } else {
-        removeBrowserProfessional(professional.id);
-        await refreshProfessionals();
-      }
+      const nextLocalProfessionals = mergeProfessionals(
+        loadBrowserProfessionals().filter((item) => item.id !== professional.id),
+        [{ ...professional, active: false }]
+      );
+      saveBrowserProfessionals(nextLocalProfessionals);
+      setProfessionals((currentProfessionals) =>
+        mergeProfessionals(
+          currentProfessionals.map((item) =>
+            item.id === professional.id ? { ...item, active: false } : item
+          ),
+          nextLocalProfessionals
+        )
+      );
+      notifyBusinessSnapshotUpdated();
+      await refreshProfessionals();
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -357,7 +345,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
         throw new Error(payload.error ?? "No pude actualizar el estado.");
       }
 
-      if (payload.data && payload.fallback) {
+      if (payload.data) {
         upsertBrowserProfessional(payload.data);
         setProfessionals((currentProfessionals) =>
           mergeProfessionals(
@@ -367,19 +355,10 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
             loadBrowserProfessionals()
           )
         );
-        notifyBusinessSnapshotUpdated();
-      } else {
-        if (payload.data) {
-          saveBrowserProfessionals(
-            loadBrowserProfessionals().map((item) =>
-              item.id === professional.id ? payload.data! : item
-            )
-          );
-        } else {
-          removeBrowserProfessional(professional.id);
-        }
-        await refreshProfessionals();
       }
+
+      notifyBusinessSnapshotUpdated();
+      await refreshProfessionals();
     } catch (toggleError) {
       setError(
         toggleError instanceof Error
