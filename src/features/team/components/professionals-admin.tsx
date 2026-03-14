@@ -68,8 +68,37 @@ function createFormFromProfessional(professional?: Professional | null): Profess
   };
 }
 
+function sortProfessionalsByName(items: Professional[]) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function upsertProfessional(items: Professional[], professional: Professional) {
+  const nextItems = items.filter((item) => item.id !== professional.id);
+  nextItems.push(professional);
+  return sortProfessionalsByName(nextItems);
+}
+
+function mergeProfessionalsFromProps(
+  currentProfessionals: Professional[],
+  incomingProfessionals: Professional[]
+) {
+  const merged = new Map<string, Professional>();
+
+  currentProfessionals.forEach((professional) => {
+    merged.set(professional.id, professional);
+  });
+
+  incomingProfessionals.forEach((professional) => {
+    merged.set(professional.id, professional);
+  });
+
+  return sortProfessionalsByName(Array.from(merged.values()));
+}
+
 export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminProps) {
-  const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals);
+  const [professionals, setProfessionals] = useState<Professional[]>(
+    sortProfessionalsByName(initialProfessionals)
+  );
   const [query, setQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState<"all" | BranchId>("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -80,7 +109,9 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setProfessionals(initialProfessionals);
+    setProfessionals((currentProfessionals) =>
+      mergeProfessionalsFromProps(currentProfessionals, initialProfessionals)
+    );
   }, [initialProfessionals]);
 
   const roles = useMemo(
@@ -162,6 +193,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
 
       const payload = (await response.json()) as {
         success: boolean;
+        data?: Professional;
         error?: string;
       };
 
@@ -169,6 +201,16 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
         throw new Error(payload.error ?? "No pude guardar el profesional.");
       }
 
+      if (payload.data) {
+        setProfessionals((currentProfessionals) =>
+          upsertProfessional(currentProfessionals, payload.data as Professional)
+        );
+      }
+
+      setQuery("");
+      setBranchFilter("all");
+      setRoleFilter("all");
+      setStatusFilter("all");
       await refreshProfessionals();
       setEditorOpen(false);
       setForm(emptyForm);

@@ -28,12 +28,12 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-full flex-col rounded-[32px] border border-[var(--theme-border)] bg-[var(--theme-sidebar-bg)] px-5 py-6 text-[var(--theme-sidebar-text)] shadow-[var(--theme-shell-shadow)] transition-colors">
-      <div className="border-b border-white/10 pb-5">
+    <aside className="flex h-full flex-col rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-sidebar-bg)] px-4 py-5 text-[var(--theme-sidebar-text)] shadow-[var(--theme-shell-shadow)] transition-colors md:rounded-[32px] md:px-5 md:py-6">
+      <div className="border-b border-white/10 pb-4 md:pb-5">
         <p className="text-xs uppercase tracking-[0.28em] text-[var(--theme-sidebar-muted)]">
           SalonAnalyst2
         </p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-2 text-xl font-semibold tracking-tight md:text-2xl">
           Financial Control
         </h2>
         <p className="mt-2 text-sm text-[var(--theme-sidebar-muted)]">
@@ -41,7 +41,7 @@ export function Sidebar() {
         </p>
       </div>
 
-      <nav className="mt-6 space-y-2">
+      <nav className="mt-5 space-y-2 md:mt-6">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -64,7 +64,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4">
+      <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-4 md:mt-auto">
         <p className="text-xs uppercase tracking-[0.24em] text-[var(--theme-sidebar-muted)]">
           Estado
         </p>
