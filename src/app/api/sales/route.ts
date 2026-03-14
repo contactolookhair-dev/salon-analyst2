@@ -79,7 +79,11 @@ function normalizeLegacyPayload(body: LegacySalePayload | PersistedSalePayloadLi
         total:
           safeNumber(body.grossTotal) ||
           body.items?.reduce((sum, item) => {
-            return sum + safeNumber(item.total) + safeNumber(item.grossTotal);
+            return (
+              sum +
+              safeNumber(item.totalLineGross) +
+              safeNumber((item as { grossTotal?: number }).grossTotal)
+            );
           }, 0) ||
           0,
         clientName: safeString(body.clientName) || undefined,

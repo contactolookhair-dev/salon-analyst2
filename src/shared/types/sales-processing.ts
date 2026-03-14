@@ -25,11 +25,20 @@ export type ParsedReceiptItem = {
 export type ParsedReceiptDocument = {
   source: ReceiptSource;
   date: string;
+  time?: string;
   branchName: string;
+  issuerName?: string;
   professionalName: string;
   clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  receiptNumber?: string;
+  paymentMethod?: string;
   items: ParsedReceiptItem[];
+  subtotalDocument?: number;
+  taxDocument?: number;
   totalDocument: number;
+  balanceDocument?: number;
   observations: string[];
   rawText: string;
 };

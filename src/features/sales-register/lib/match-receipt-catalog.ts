@@ -161,6 +161,7 @@ function applyBusinessFallbackRules(
 
   let unitLabel = baseLine.unitLabel;
   let unitCost = baseLine.unitCost;
+  let baseUnitCost = baseLine.baseUnitCost;
   let commissionType = baseLine.commissionType;
   let commissionValue = baseLine.commissionValue;
   let itemType = baseLine.itemType;
@@ -175,6 +176,7 @@ function applyBusinessFallbackRules(
     unitLabel = "sheet";
     resolvedUnitLabel = "sheet";
     unitCost = baseLine.unitCost || 500;
+    baseUnitCost = catalogItem?.costo || unitCost;
     commissionType = baseLine.commissionType === "none" ? "fixed" : baseLine.commissionType;
     commissionValue = baseLine.commissionValue || 500;
     itemType = catalogItem?.tipo ?? "product";
@@ -185,21 +187,21 @@ function applyBusinessFallbackRules(
     unitLabel = "sheet";
     resolvedUnitLabel = "sheet";
     unitCost = baseLine.unitCost || 500;
+    baseUnitCost = catalogItem?.costo || unitCost;
     itemType = catalogItem?.tipo ?? "product";
     priceMode = "unit";
   }
 
   if (classification === "adhesive_maintenance_pair") {
-    const shouldConvertSheetsToPairs =
-      quantityDetection.unitLabel !== "pair" && quantity > 1;
     unitLabel = "pair";
     unitCost = unitCost || 500;
+    baseUnitCost = catalogItem?.costo || unitCost;
     commissionType = "percentage";
     commissionValue = 40;
     itemType = "service";
     priceMode = "unit";
     resolvedUnitLabel = "pair";
-    quantity = shouldConvertSheetsToPairs ? Math.max(Math.round(quantity / 2), 1) : quantity;
+    quantity = Math.max(quantity, 1);
   }
 
   let unitPrice = baseLine.unitPrice;
@@ -224,8 +226,11 @@ function applyBusinessFallbackRules(
     priceMode,
     unitPrice,
     unitCost,
+    baseUnitPrice: catalogItem?.precio_venta_bruto || baseLine.baseUnitPrice || unitPrice,
+    baseUnitCost,
     commissionType,
     commissionValue,
+    category: catalogItem?.categoria ?? baseLine.category,
     warnings: Array.from(new Set(warnings)),
   };
 }
@@ -235,7 +240,8 @@ function buildLineDraftFromCatalog(
   quantity: number,
   lineTotal: number,
   catalogItem: CatalogItem | null,
-  matchType: SaleLineDraft["matchType"] = "unmatched"
+  matchType: SaleLineDraft["matchType"] = "unmatched",
+  extractedUnit?: string | null
 ): SaleLineDraft {
   const inferredType = catalogItem?.tipo ?? inferItemTypeFromName(detectedName);
   const missingConfigLabel =
@@ -256,13 +262,17 @@ function buildLineDraftFromCatalog(
     id: `draft-line-${Math.random().toString(36).slice(2, 8)}`,
     inputName: detectedName,
     normalizedName: normalizeLooseName(detectedName),
+    originalPdfName: detectedName,
     matchedCatalogId: catalogItem?.id ?? null,
     matchedCatalogName: catalogItem?.nombre ?? null,
+    category: catalogItem?.categoria ?? "",
     itemType: inferredType,
     quantity: quantityValue,
-    unitLabel: catalogItem?.unit_label ?? "unit",
+    unitLabel: extractedUnit ?? catalogItem?.unit_label ?? "unit",
     priceMode: "unit",
     unitPrice,
+    baseUnitPrice: catalogItem?.precio_venta_bruto ?? unitPrice,
+    sourceLineTotal: lineTotal || unitPrice * quantityValue,
     grossLineTotal: lineTotal || unitPrice * quantityValue,
     netLineTotal: 0,
     vatAmount: 0,
@@ -271,6 +281,8 @@ function buildLineDraftFromCatalog(
     commissionBase: catalogItem?.commission_base ?? "net",
     commissionAmount: 0,
     unitCost: catalogItem?.costo ?? 0,
+    baseUnitCost: catalogItem?.costo ?? 0,
+    estimatedUnitCost: catalogItem?.costo ?? 0,
     totalCost: 0,
     profit: 0,
     warnings:
@@ -283,6 +295,15 @@ function buildLineDraftFromCatalog(
         : "requires_review",
     catalogItem,
     matchType: catalogItem ? matchType : "unmatched",
+    matchMethod: !catalogItem
+      ? "sin_configurar"
+      : matchType === "exact"
+        ? "exacto"
+        : matchType === "normalized"
+          ? "normalizado"
+          : matchType === "suggested"
+            ? "sugerido"
+            : "sin_configurar",
   };
 
   return applyBusinessFallbackRules(
@@ -296,6 +317,7 @@ function buildLineDraftFromCatalog(
       unitCost: matchType === "suggested" ? 0 : baseLine.unitCost,
       unitLabel: matchType === "suggested" ? "unit" : baseLine.unitLabel,
       matchType: matchType === "suggested" ? "unmatched" : baseLine.matchType,
+      matchMethod: matchType === "suggested" ? "sugerido" : baseLine.matchMethod,
       status: matchType === "suggested" ? "requires_review" : baseLine.status,
       warnings:
         matchType === "suggested"
@@ -325,7 +347,8 @@ export function createSaleDraftFromExtraction(
       item.quantity,
       item.lineTotal ?? 0,
       resolvedMatch.item,
-      resolvedMatch.matchType
+      resolvedMatch.matchType,
+      item.unit
     );
   });
 
@@ -334,11 +357,15 @@ export function createSaleDraftFromExtraction(
     sourceProvider: extraction.source,
     extractedBy: extraction.extractedBy,
     clientName: sanitizeNullableString(extraction.clientName),
+    clientEmail: sanitizeNullableString(extraction.clientEmail),
+    clientPhone: sanitizeNullableString(extraction.clientPhone),
     professionalName: sanitizeNullableString(extraction.professionalName),
     branchName: sanitizeNullableString(extraction.branchName),
     branchId: branch?.id ?? null,
     receiptNumber: extraction.receiptNumber ?? "",
     date: extraction.date ?? "",
+    time: extraction.time ?? "",
+    issuerName: sanitizeNullableString(extraction.issuerName),
     paymentMethod: extraction.paymentMethod ?? "",
     currency: extraction.currency ?? "CLP",
     subtotal: extraction.subtotal ?? 0,
@@ -346,6 +373,8 @@ export function createSaleDraftFromExtraction(
     grossTotal: extraction.grossTotal ?? 0,
     netTotal: extraction.netTotal ?? 0,
     totalPaid: extraction.totalPaid ?? extraction.grossTotal ?? 0,
+    balance: extraction.balance ?? 0,
+    origin: extraction.origin ?? "pdf",
     items,
     warnings: [...extraction.warnings],
     confidence: extraction.confidence,
@@ -362,11 +391,15 @@ export function createEmptyManualSaleDraft(): SaleDraft {
     sourceProvider: "unknown",
     extractedBy: "manual",
     clientName: "",
+    clientEmail: "",
+    clientPhone: "",
     professionalName: "",
     branchName: "",
     branchId: null,
     receiptNumber: "",
     date: new Date().toISOString().slice(0, 10),
+    time: "",
+    issuerName: "",
     paymentMethod: "",
     currency: "CLP",
     subtotal: 0,
@@ -374,6 +407,8 @@ export function createEmptyManualSaleDraft(): SaleDraft {
     grossTotal: 0,
     netTotal: 0,
     totalPaid: 0,
+    balance: 0,
+    origin: "manual",
     items: [
       buildLineDraftFromCatalog("", 1, 0, null),
     ],

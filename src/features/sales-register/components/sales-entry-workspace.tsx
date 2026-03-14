@@ -90,14 +90,47 @@ function buildPayloadFromDraft(
     professionalId,
     professionalName,
     clientName: draft.clientName,
+    clientEmail: draft.clientEmail,
+    clientPhone: draft.clientPhone,
     serviceLabel: draft.items
       .map((item) => item.matchedCatalogName ?? item.inputName)
       .filter(Boolean)
       .join(" + "),
     grossTotal: totals.grossTotal,
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    netTotal: totals.netTotal,
     commissionTotal: totals.commissionTotal,
+    costTotal: totals.costTotal,
     profitTotal: totals.profitTotal,
     receiptNumber: draft.receiptNumber,
+    time: draft.time,
+    issuerName: draft.issuerName,
+    paymentMethod: draft.paymentMethod,
+    balance: draft.balance,
+    origin: draft.origin,
+    items: draft.items.map((item) => ({
+      originalPdfName: item.originalPdfName,
+      catalogName: item.matchedCatalogName,
+      type: item.itemType,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unitLabel,
+      unitPriceCharged: item.unitPrice,
+      unitPriceBase: item.baseUnitPrice,
+      totalLineGross: item.grossLineTotal,
+      netLine: item.netLineTotal,
+      vatLine: item.vatAmount,
+      unitCostBase: item.baseUnitCost,
+      estimatedUnitCost: item.estimatedUnitCost,
+      totalCost: item.totalCost,
+      commissionType: item.commissionType,
+      commissionValue: item.commissionValue,
+      commissionTotal: item.commissionAmount,
+      profit: item.profit,
+      matchType: item.matchType,
+      matchMethod: item.matchMethod,
+    })),
     confirmDuplicate,
   };
 }
@@ -105,7 +138,9 @@ function buildPayloadFromDraft(
 function applyCatalogItem(
   line: SaleLineDraft,
   catalogItemId: string,
-  availableCatalogItems: CatalogItem[]
+  availableCatalogItems: CatalogItem[],
+  matchType: SaleLineDraft["matchType"] = "exact",
+  matchMethod: SaleLineDraft["matchMethod"] = "manual"
 ) {
   const catalogItem = findCatalogItemById(catalogItemId, availableCatalogItems);
 
@@ -119,17 +154,22 @@ function applyCatalogItem(
     normalizedName: catalogItem.nombre_normalizado,
     matchedCatalogId: catalogItem.id,
     matchedCatalogName: catalogItem.nombre,
+    category: catalogItem.categoria,
     itemType: catalogItem.tipo,
     quantity: line.quantity || catalogItem.default_quantity || 1,
     unitLabel: catalogItem.unit_label ?? "unit",
     priceMode: "unit",
     unitPrice: line.unitPrice || catalogItem.precio_venta_bruto || 0,
+    baseUnitPrice: catalogItem.precio_venta_bruto || 0,
     commissionType: catalogItem.commission_type,
     commissionValue: catalogItem.commission_value,
     commissionBase: catalogItem.commission_base ?? "net",
     unitCost: catalogItem.costo,
+    baseUnitCost: catalogItem.costo,
+    estimatedUnitCost: catalogItem.costo,
     catalogItem,
-    matchType: "exact",
+    matchType,
+    matchMethod,
     warnings:
       catalogItem.estado_configuracion === "incompleto"
         ? [
@@ -983,6 +1023,36 @@ export function SalesEntryWorkspace({
                     className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
                   />
                 </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Email cliente</span>
+                  <input
+                    value={draft.clientEmail}
+                    onChange={(event) =>
+                      updateDraft({ ...draft, clientEmail: event.target.value })
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Teléfono cliente</span>
+                  <input
+                    value={draft.clientPhone}
+                    onChange={(event) =>
+                      updateDraft({ ...draft, clientPhone: event.target.value })
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Hora</span>
+                  <input
+                    value={draft.time}
+                    onChange={(event) =>
+                      updateDraft({ ...draft, time: event.target.value })
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                  />
+                </label>
               </div>
 
               <div className="space-y-4">
@@ -999,6 +1069,37 @@ export function SalesEntryWorkspace({
                       key={line.id}
                       className="rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4"
                     >
+                      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-full bg-olive-950/5 px-3 py-1 font-medium text-olive-950">
+                          {line.itemType === "service"
+                            ? "Servicio"
+                            : line.itemType === "product"
+                              ? "Producto"
+                              : "Sin configurar"}
+                        </span>
+                        {line.category ? (
+                          <span className="rounded-full bg-white px-3 py-1 text-muted-foreground">
+                            {line.category}
+                          </span>
+                        ) : null}
+                        <span className="rounded-full bg-white px-3 py-1 text-muted-foreground">
+                          {line.matchMethod === "exacto"
+                            ? "Coincidencia exacta"
+                            : line.matchMethod === "normalizado"
+                              ? "Coincidencia normalizada"
+                              : line.matchMethod === "sugerido"
+                                ? "Coincidencia sugerida"
+                                : line.matchMethod === "manual"
+                                  ? "Corrección manual"
+                                  : "Sin configurar"}
+                        </span>
+                        {line.matchedCatalogName ? (
+                          <span className="rounded-full bg-white px-3 py-1 text-muted-foreground">
+                            Catálogo: {line.matchedCatalogName}
+                          </span>
+                        ) : null}
+                      </div>
+
                       <div className="grid gap-3 xl:grid-cols-[2.3fr_0.7fr_0.9fr_0.9fr_0.9fr_0.6fr]">
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-olive-950">
@@ -1023,13 +1124,22 @@ export function SalesEntryWorkspace({
                                   return recalculateSaleLine({
                                     ...nextLine,
                                     matchType: "unmatched",
+                                    matchMethod: "sin_configurar",
                                   });
                                 }
 
                                 return applyCatalogItem(
                                   nextLine,
                                   resolvedMatch.item.id,
-                                  availableCatalogItems
+                                  availableCatalogItems,
+                                  resolvedMatch.matchType,
+                                  resolvedMatch.matchType === "exact"
+                                    ? "exacto"
+                                    : resolvedMatch.matchType === "normalized"
+                                      ? "normalizado"
+                                      : resolvedMatch.matchType === "suggested"
+                                        ? "sugerido"
+                                        : "sin_configurar"
                                 );
                               })
                             }
@@ -1135,7 +1245,7 @@ export function SalesEntryWorkspace({
                         </div>
                       </div>
 
-                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
                           <p className="text-muted-foreground">Bruto total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
@@ -1158,6 +1268,12 @@ export function SalesEntryWorkspace({
                           <p className="text-muted-foreground">Comisión total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.commissionAmount)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white/90 p-3 text-sm">
+                          <p className="text-muted-foreground">Costo total línea</p>
+                          <p className="mt-1 font-semibold text-olive-950">
+                            {formatCurrency(line.totalCost)}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
@@ -1377,7 +1493,9 @@ export function SalesEntryWorkspace({
                                       applyCatalogItem(
                                         currentLine,
                                         nextItem.id,
-                                        [...availableCatalogItems, nextItem]
+                                        [...availableCatalogItems, nextItem],
+                                        "exact",
+                                        "manual"
                                       )
                                     );
                                     setCatalogForms((current) => {
@@ -1411,13 +1529,17 @@ export function SalesEntryWorkspace({
                         id: crypto.randomUUID(),
                         inputName: "",
                         normalizedName: "",
+                        originalPdfName: "",
                         matchedCatalogId: null,
                         matchedCatalogName: "",
+                        category: "",
                         itemType: "unknown",
                         quantity: 1,
                         unitLabel: "unit",
                         priceMode: "unit",
                         unitPrice: 0,
+                        baseUnitPrice: 0,
+                        sourceLineTotal: 0,
                         grossLineTotal: 0,
                         netLineTotal: 0,
                         vatAmount: 0,
@@ -1426,11 +1548,14 @@ export function SalesEntryWorkspace({
                         commissionValue: 0,
                         commissionAmount: 0,
                         unitCost: 0,
+                        baseUnitCost: 0,
+                        estimatedUnitCost: 0,
                         totalCost: 0,
                         profit: 0,
                         status: "requires_review",
                         warnings: [],
                         matchType: "unmatched",
+                        matchMethod: "manual",
                         catalogItem: null,
                       }),
                     ],
@@ -1442,11 +1567,23 @@ export function SalesEntryWorkspace({
                 Agregar línea
               </button>
 
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-6">
                 <div className="rounded-[24px] bg-[#fbfaf6] p-4">
                   <p className="text-sm text-muted-foreground">Bruto total</p>
                   <p className="mt-2 text-2xl font-semibold text-olive-950">
                     {formatCurrency(grossTotal)}
+                  </p>
+                </div>
+                <div className="rounded-[24px] bg-[#fbfaf6] p-4">
+                  <p className="text-sm text-muted-foreground">Neto total</p>
+                  <p className="mt-2 text-2xl font-semibold text-olive-950">
+                    {formatCurrency(draft.netTotal)}
+                  </p>
+                </div>
+                <div className="rounded-[24px] bg-[#fbfaf6] p-4">
+                  <p className="text-sm text-muted-foreground">IVA total</p>
+                  <p className="mt-2 text-2xl font-semibold text-olive-950">
+                    {formatCurrency(draft.tax)}
                   </p>
                 </div>
                 <div className="rounded-[24px] bg-[#fbfaf6] p-4">

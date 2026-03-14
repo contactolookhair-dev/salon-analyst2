@@ -12,17 +12,23 @@ describe("match receipt catalog", () => {
       source: "unknown",
       extractedBy: "manual",
       clientName: "Camila",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: null,
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: null,
       subtotal: null,
       tax: null,
       grossTotal: 32000,
       netTotal: null,
       totalPaid: 32000,
+      balance: null,
       currency: "CLP",
+      origin: "manual",
       items: [
         {
           id: "i1",
@@ -58,17 +64,23 @@ describe("match receipt catalog", () => {
       source: "fresha",
       extractedBy: "text",
       clientName: "Leonardo",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "null",
       branchName: "House Of Hair",
       receiptNumber: "251",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Crédito",
       subtotal: 100000,
       tax: 19000,
       grossTotal: 119000,
       netTotal: 100000,
       totalPaid: 119000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [],
       warnings: [],
       confidence: 1,
@@ -83,17 +95,23 @@ describe("match receipt catalog", () => {
       source: "fresha",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "1",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 170000,
       netTotal: 0,
       totalPaid: 170000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "adh-1",
@@ -121,17 +139,23 @@ describe("match receipt catalog", () => {
       source: "fresha",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "5",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 85000,
       netTotal: 0,
       totalPaid: 85000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "adh-exact",
@@ -166,17 +190,23 @@ describe("match receipt catalog", () => {
       source: "fresha",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "2",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 550000,
       netTotal: 0,
       totalPaid: 550000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "nano-1",
@@ -204,17 +234,23 @@ describe("match receipt catalog", () => {
       source: "agendapro",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "3",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 8000,
       netTotal: 0,
       totalPaid: 8000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "maint-1",
@@ -243,17 +279,23 @@ describe("match receipt catalog", () => {
       source: "fresha",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "6",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 80000,
       netTotal: 0,
       totalPaid: 80000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "maint-exact",
@@ -274,15 +316,15 @@ describe("match receipt catalog", () => {
     const recalculated = recalculateSaleLine(draft.items[0]);
 
     expect(recalculated.unitLabel).toBe("pair");
-    expect(recalculated.quantity).toBe(10);
+    expect(recalculated.quantity).toBe(20);
     expect(recalculated.priceMode).toBe("unit");
     expect(recalculated.unitPrice).toBe(4000);
-    expect(recalculated.grossLineTotal).toBe(40000);
+    expect(recalculated.grossLineTotal).toBe(80000);
     expect(recalculated.commissionType).toBe("percentage");
     expect(recalculated.commissionValue).toBe(40);
-    expect(recalculated.commissionAmount).toBe(13445);
-    expect(recalculated.totalCost).toBe(5000);
-    expect(recalculated.profit).toBe(15168);
+    expect(recalculated.commissionAmount).toBe(26891);
+    expect(recalculated.totalCost).toBe(10000);
+    expect(recalculated.profit).toBe(30336);
   });
 
   it("no aplica 40 por ciento automatico a otras mantenciones", () => {
@@ -290,17 +332,23 @@ describe("match receipt catalog", () => {
       source: "agendapro",
       extractedBy: "text",
       clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
       professionalName: "Ivanova",
       branchName: "House Of Hair",
       receiptNumber: "4",
       date: "2026-03-14",
+      time: null,
+      issuerName: null,
       paymentMethod: "Credito",
       subtotal: 0,
       tax: 0,
       grossTotal: 30000,
       netTotal: 0,
       totalPaid: 30000,
+      balance: null,
       currency: "CLP",
+      origin: "pdf",
       items: [
         {
           id: "maint-2",

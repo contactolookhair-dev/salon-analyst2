@@ -87,12 +87,18 @@ function extractDate(rawText: string) {
   return numericDateMatch?.[1] ? parseDateToIso(numericDateMatch[1]) : "";
 }
 
+function extractTime(rawText: string) {
+  const match = rawText.match(/\b(\d{2}:\d{2})\b/);
+  return match?.[1] ?? "";
+}
+
 export function parseAgendaProReceipt(rawText: string): ParsedReceiptDocument {
   const items = extractItems(rawText);
   const branchName =
     extractValue(rawText, ["Sucursal", "Branch", "Location"]) ||
     extractKnownBranch(rawText);
   const date = extractDate(rawText);
+  const time = extractTime(rawText);
   const totalDocument =
     extractCurrency(extractValue(rawText, ["Total", "Total a pagar", "Monto total"])) ||
     extractCurrency(extractValue(rawText, ["TOTAL", "Monto pagado"]));
@@ -104,6 +110,13 @@ export function parseAgendaProReceipt(rawText: string): ParsedReceiptDocument {
         ""
     );
   const observations: string[] = [];
+  const paymentMethod =
+    rawText.match(/\b(Crédito|Credito|Débito|Debito|Efectivo|Transferencia)\b/i)?.[1] ||
+    extractValue(rawText, ["Metodo de pago", "Método de pago", "Payment method"]) ||
+    "";
+  const receiptNumber =
+    extractValue(rawText, ["Ticket", "Venta", "Sale"]) ||
+    normalizeWhitespace(rawText.match(/ticket\s*#?\s*([^\n]+)/i)?.[1] ?? "");
 
   if (items.length === 0) {
     observations.push("No se pudo detectar el nombre del servicio o producto.");
@@ -124,11 +137,20 @@ export function parseAgendaProReceipt(rawText: string): ParsedReceiptDocument {
   return {
     source: "agendapro",
     date,
+    time,
     branchName,
+    issuerName: branchName,
     professionalName,
     clientName: extractClient(rawText),
+    clientEmail: extractValue(rawText, ["Email", "Correo"]) || "",
+    clientPhone: extractValue(rawText, ["Telefono", "Teléfono", "Phone"]) || "",
+    receiptNumber,
+    paymentMethod,
     items,
+    subtotalDocument: extractCurrency(extractValue(rawText, ["Subtotal"])) || undefined,
+    taxDocument: extractCurrency(extractValue(rawText, ["IVA"])) || undefined,
     totalDocument,
+    balanceDocument: extractCurrency(extractValue(rawText, ["Saldo", "Balance"])) || undefined,
     observations,
     rawText,
   };

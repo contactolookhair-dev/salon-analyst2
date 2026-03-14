@@ -161,8 +161,8 @@ Crédito $544,960.00`);
     );
 
     expect(draft.professionalName).toBe("");
-    expect(draft.receiptNumber).toBe("");
-    expect(draft.paymentMethod).toBe("");
+    expect(draft.receiptNumber).toBe("251");
+    expect(draft.paymentMethod).toContain("Crédito");
     expect(draft.items.map((item) => item.matchedCatalogId)).toEqual([
       "protesis-premium-4k-tono-1",
       "removedor-de-extensiones-adhesivas",

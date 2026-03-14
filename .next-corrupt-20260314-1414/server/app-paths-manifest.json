@@ -1,0 +1,6 @@
+{
+  "/manifest.webmanifest/route": "app/manifest.webmanifest/route.js",
+  "/api/business-snapshot/route": "app/api/business-snapshot/route.js",
+  "/equipo/page": "app/equipo/page.js",
+  "/ventas/page": "app/ventas/page.js"
+}
