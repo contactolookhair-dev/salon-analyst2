@@ -25,12 +25,18 @@ type ReceiptUploaderProps = {
 
 type UploadStatus = "idle" | "uploading" | "processing" | "error" | "ready";
 
+type SafeJsonResult<T> = {
+  ok: boolean;
+  data: T | null;
+  rawText: string;
+};
+
 function getStatusLabel(status: ProcessedSale["items"][number]["status"]) {
   switch (status) {
     case "matched":
       return "Detectado correctamente";
     case "missing_commission_rule":
-      return "Falta regla de comision";
+      return "Falta regla de comisión";
     case "missing_cost":
       return "Falta costo";
     case "missing_branch":
@@ -40,7 +46,7 @@ function getStatusLabel(status: ProcessedSale["items"][number]["status"]) {
     case "service_not_found":
       return "Servicio no encontrado";
     default:
-      return "Requiere revision";
+      return "Requiere revisión";
   }
 }
 
@@ -64,7 +70,7 @@ function getUploadMessage(status: UploadStatus) {
     case "processing":
       return "Procesando PDF y extrayendo texto...";
     case "ready":
-      return "Boleta lista para revision.";
+      return "Boleta lista para revisión.";
     case "error":
       return "No pudimos procesar la boleta.";
     default:
@@ -72,18 +78,57 @@ function getUploadMessage(status: UploadStatus) {
   }
 }
 
-async function parseJsonSafely(response: Response) {
+async function parseJsonSafely<T>(response: Response): Promise<SafeJsonResult<T>> {
   const rawText = await response.text();
 
   if (!rawText) {
-    return null;
+    return {
+      ok: false,
+      data: null,
+      rawText: "",
+    };
   }
 
   try {
-    return JSON.parse(rawText) as ReceiptProcessingApiResponse;
+    return {
+      ok: true,
+      data: JSON.parse(rawText) as T,
+      rawText,
+    };
   } catch {
-    return null;
+    return {
+      ok: false,
+      data: null,
+      rawText,
+    };
   }
+}
+
+function buildReadableErrorMessage(
+  fallbackMessage: string,
+  options?: {
+    responseStatus?: number;
+    rawText?: string;
+    parsedError?: string | null;
+  }
+) {
+  if (options?.parsedError?.trim()) {
+    return options.parsedError.trim();
+  }
+
+  if (options?.responseStatus && options.responseStatus >= 500) {
+    return "El servidor encontró un error interno al procesar la boleta.";
+  }
+
+  if (options?.responseStatus && options.responseStatus >= 400) {
+    return fallbackMessage;
+  }
+
+  if (options?.rawText?.trim()) {
+    return `${fallbackMessage} Respuesta recibida: ${options.rawText.slice(0, 240)}`;
+  }
+
+  return fallbackMessage;
 }
 
 export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
@@ -103,7 +148,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
 
     if (!isPdfFile(file)) {
       setStatus("error");
-      setError("El archivo seleccionado no es un PDF valido.");
+      setError("El archivo seleccionado no es un PDF válido.");
       return;
     }
 
@@ -123,18 +168,35 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
       });
 
       setStatus("processing");
-      const payload = await parseJsonSafely(response);
 
-      if (!payload) {
+      const parsed = await parseJsonSafely<ReceiptProcessingApiResponse>(response);
+
+      if (!parsed.ok || !parsed.data) {
         throw new Error(
-          "El servidor no devolvio una respuesta valida al procesar la boleta."
+          buildReadableErrorMessage(
+            "El servidor no devolvió una respuesta válida al procesar la boleta.",
+            {
+              responseStatus: response.status,
+              rawText: parsed.rawText,
+            }
+          )
         );
       }
+
+      const payload = parsed.data;
 
       if (!payload.success) {
         setFailure(payload);
         setStatus("error");
-        setError(payload.error);
+        setError(
+          buildReadableErrorMessage(
+            "No pude procesar la boleta.",
+            {
+              responseStatus: response.status,
+              parsedError: payload.error,
+            }
+          )
+        );
         return;
       }
 
@@ -162,6 +224,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
       setError(null);
 
       const primaryItem = result.data.processedSale.items[0];
+
       const response = await fetch("/api/sales", {
         method: "POST",
         headers: {
@@ -184,10 +247,19 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
         }),
       });
 
-      const payload = (await response.json()) as { error?: string };
+      const parsed = await parseJsonSafely<{ error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "No pude registrar la venta.");
+        throw new Error(
+          buildReadableErrorMessage(
+            "No pude registrar la venta.",
+            {
+              responseStatus: response.status,
+              parsedError: parsed.data?.error ?? null,
+              rawText: parsed.rawText,
+            }
+          )
+        );
       }
 
       setIsConfirmed(true);
@@ -217,9 +289,9 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
             Subir PDF de Fresha o AgendaPro
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            El uploader valida el archivo, lo envia al backend, extrae el texto
-            con `pdf-parse` y solo entonces intenta detectar proveedor, items y
-            calculos financieros.
+            El uploader valida el archivo, lo envía al backend, extrae el texto
+            con pdf-parse y solo entonces intenta detectar proveedor, ítems y
+            cálculos financieros.
           </p>
         </div>
         <ReceiptText className="size-5 text-olive-700" />
@@ -233,7 +305,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
           </span>
           <span className="text-xs text-muted-foreground">
             Solo PDFs. Si el documento no contiene texto seleccionable o faltan
-            campos clave, lo veras claramente antes de guardar.
+            campos clave, lo verás claramente antes de guardar.
           </span>
           <input
             type="file"
@@ -333,7 +405,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
 
           {failure.fallback.extractedTextPreview ? (
             <div className="rounded-2xl bg-[#fffdf7] p-4 text-sm">
-              <p className="font-semibold text-olive-950">Texto extraido parcial</p>
+              <p className="font-semibold text-olive-950">Texto extraído parcial</p>
               <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
                 {failure.fallback.extractedTextPreview}
               </p>
@@ -352,7 +424,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
                     Preview procesado
                   </p>
                   <h4 className="mt-2 text-lg font-semibold text-olive-950">
-                    Revision previa antes de guardar
+                    Revisión previa antes de guardar
                   </h4>
                 </div>
                 {processedSale.reviewRequired ? (
@@ -393,7 +465,9 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
                 </div>
                 <div className="rounded-2xl border border-white/70 bg-white/90 p-4 text-sm md:col-span-2">
                   <p className="font-semibold text-olive-950">Cliente</p>
-                  <p className="mt-1 text-muted-foreground">{processedSale.clientName}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {processedSale.clientName}
+                  </p>
                 </div>
               </div>
             </div>
@@ -422,7 +496,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-olive-950/8 bg-[#f8f6ef] p-4 text-sm">
-                  <p className="text-muted-foreground">Comision</p>
+                  <p className="text-muted-foreground">Comisión</p>
                   <p className="mt-1 text-lg font-semibold text-olive-950">
                     {formatCurrency(processedSale.totals.commission)}
                   </p>
@@ -451,10 +525,10 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
 
           <div className="rounded-[24px] border border-olive-950/8 bg-white/85 p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Items detectados
+              Ítems detectados
             </p>
             <h4 className="mt-2 text-lg font-semibold text-olive-950">
-              Lineas procesadas desde la boleta
+              Líneas procesadas desde la boleta
             </h4>
 
             <div className="mt-4 space-y-4">
@@ -494,7 +568,7 @@ export function ReceiptUploader({ onRegistered }: ReceiptUploaderProps) {
                       </p>
                     </div>
                     <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                      <p className="text-muted-foreground">Comision</p>
+                      <p className="text-muted-foreground">Comisión</p>
                       <p className="mt-1 font-semibold text-olive-950">
                         {formatCurrency(item.commissionAmount)}
                       </p>

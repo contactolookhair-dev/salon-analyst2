@@ -61,6 +61,25 @@ type ParserFailureContext = {
   cause?: unknown;
 };
 
+export function parseCLP(value: string | number | null | undefined): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (!value) return 0;
+
+  const normalized = String(value)
+    .replace(/\s+/g, "")
+    .replace(/\$/g, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "")
+    .replace(/,(?=\d{3}(\D|$))/g, "")
+    .replace(/,(\d{1,2})$/, ".$1")
+    .trim();
+
+  const result = Number(normalized);
+  return Number.isFinite(result) ? result : 0;
+}
+
 class ReceiptParserError extends Error {
   code: string;
   stage: ReceiptParserStage;
@@ -105,14 +124,47 @@ function logReceiptError(message: string, context: Record<string, unknown>) {
   console.error(`[receipt-parser] ${message}`, context);
 }
 
-export function detectReceiptProvider(rawText: string): ReceiptSource {
-  const normalizedText = rawText.toLowerCase();
+function normalizeText(rawText: string) {
+  return rawText
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
+export function detectReceiptProvider(rawText: string): ReceiptSource {
+  const normalizedText = normalizeText(rawText);
+
+  // Detección explícita por marca
   if (normalizedText.includes("fresha")) {
     return "fresha";
   }
 
   if (normalizedText.includes("agendapro")) {
+    return "agendapro";
+  }
+
+  // Patrones típicos de Fresha
+  const looksLikeFresha =
+    (normalizedText.includes("subtotal") &&
+      normalizedText.includes("iva 19%") &&
+      normalizedText.includes("saldo")) ||
+    normalizedText.includes("debito") ||
+    normalizedText.includes("thursday,") ||
+    normalizedText.includes("cliente");
+
+  if (looksLikeFresha) {
+    return "fresha";
+  }
+
+  // Patrones típicos de AgendaPro
+  const looksLikeAgendaPro =
+    normalizedText.includes("detalle de la venta") ||
+    normalizedText.includes("importe base") ||
+    normalizedText.includes("atendido por:") ||
+    normalizedText.includes("ticket #") ||
+    normalizedText.includes("monto pagado");
+
+  if (looksLikeAgendaPro) {
     return "agendapro";
   }
 
@@ -151,7 +203,7 @@ function mapPdfParseError(error: unknown, context: ParserFailureContext) {
 
   if (normalizedMessage.includes("invalid pdf")) {
     return new ReceiptParserError(
-      "El archivo no parece ser un PDF valido o esta dañado.",
+      "El archivo no parece ser un PDF válido o está dañado.",
       "pdf_extraction",
       "invalid_pdf",
       { ...context, cause: error }
@@ -160,7 +212,7 @@ function mapPdfParseError(error: unknown, context: ParserFailureContext) {
 
   if (normalizedMessage.includes("password")) {
     return new ReceiptParserError(
-      "El PDF esta protegido con contraseña y no se puede leer automaticamente.",
+      "El PDF está protegido con contraseña y no se puede leer automáticamente.",
       "pdf_extraction",
       "password_protected_pdf",
       { ...context, cause: error }
@@ -196,7 +248,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptDocument {
         rawText,
         detectedSource: provider,
         warnings: [
-          "No se detecto la marca Fresha ni AgendaPro en el texto extraido.",
+          "No se detectó la marca o estructura de Fresha ni AgendaPro en el texto extraído.",
         ],
       }
     );
@@ -206,6 +258,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptDocument {
     provider === "fresha"
       ? parseFreshaReceipt(rawText)
       : parseAgendaProReceipt(rawText);
+
   const validationWarnings = validateParsedReceipt(parsedReceipt);
 
   if (validationWarnings.length > 0) {
@@ -257,7 +310,7 @@ export async function extractPdfTextFromBuffer(
 ) {
   if (!buffer.byteLength) {
     throw new ReceiptParserError(
-      "El archivo PDF esta vacio.",
+      "El archivo PDF está vacío.",
       "request_validation",
       "empty_file",
       {
@@ -266,12 +319,13 @@ export async function extractPdfTextFromBuffer(
     );
   }
 
-  const parser = new PDFParse({ data: buffer });
+  const safeBuffer = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const parser = new PDFParse({ data: safeBuffer });
 
   try {
     logReceiptEvent("starting_pdf_extraction", {
       fileName: options.fileName,
-      byteLength: buffer.byteLength,
+      byteLength: safeBuffer.byteLength,
     });
 
     const result = await parser.getText();
@@ -299,7 +353,11 @@ export async function extractPdfTextFromBuffer(
       fileName: options.fileName,
     });
   } finally {
-    await parser.destroy();
+    try {
+      await parser.destroy();
+    } catch {
+      // noop
+    }
   }
 }
 
@@ -338,16 +396,16 @@ export async function processReceiptBuffer(
       error instanceof ReceiptParserError
         ? error
         : new ReceiptParserError(
-            "No pude procesar la boleta.",
-            "field_parsing",
-            "unknown_receipt_error",
-            {
-              fileName: options.fileName,
-              rawText,
-              detectedSource,
-              cause: error,
-            }
-          );
+          "No pude procesar la boleta.",
+          "field_parsing",
+          "unknown_receipt_error",
+          {
+            fileName: options.fileName,
+            rawText,
+            detectedSource,
+            cause: error,
+          }
+        );
 
     logReceiptError("receipt_processing_failed", {
       fileName: options.fileName,
