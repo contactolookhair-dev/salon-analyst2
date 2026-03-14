@@ -1,178 +1,256 @@
 import { NextResponse } from "next/server";
 
-import {
-  processReceiptBuffer,
-  type ReceiptProcessingApiResponse,
-} from "@/features/receipt-parser/receipt-parser";
+import { branches } from "@/features/branches/data/mock-branches";
+import { parseReceiptText } from "@/features/receipt-parser/receipt-parser";
+import { extractReceiptWithAI } from "@/features/sales-register/lib/extract-receipt-with-ai";
+import { extractReceiptText } from "@/features/sales-register/lib/extract-receipt-text";
+import { createSaleDraftFromExtraction } from "@/features/sales-register/lib/match-receipt-catalog";
+import { normalizeParsedReceiptData } from "@/features/sales-register/lib/normalize-receipt-data";
+import { recalculateSaleDraft } from "@/features/sales-register/lib/calculate-receipt-financials";
+import { getProfessionalsFromStorage } from "@/server/database/business-repository";
+import type {
+  ParseReceiptApiResponse,
+  ReceiptExtraction,
+} from "@/features/sales-register/types";
+import type { Professional } from "@/shared/types/business";
 
 export const runtime = "nodejs";
 
-function isPdfFile(file: File) {
-  const normalizedName = file.name.toLowerCase();
-  return file.type === "application/pdf" || normalizedName.endsWith(".pdf");
+function logParseReceiptEvent(message: string, context: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  console.info(`[api/parse-receipt] ${message}`, context);
 }
 
-function buildErrorResponse(
-  error: string,
-  code: string,
-  stage:
-    | "request_validation"
-    | "pdf_extraction"
-    | "provider_detection"
-    | "field_parsing"
-    | "financial_processing",
-  options?: {
-    status?: number;
-    fileName?: string;
-    warnings?: string[];
-    extractedTextPreview?: string;
-    detectedSource?: "fresha" | "agendapro" | "unknown";
-  }
-) {
-  return NextResponse.json(
-    {
-      success: false,
-      error,
-      stage,
-      code,
-      fallback: {
-        fileName: options?.fileName,
-        detectedSource: options?.detectedSource ?? "unknown",
-        extractedTextPreview: options?.extractedTextPreview ?? "",
-        warnings: options?.warnings ?? [],
-      },
-    } satisfies ReceiptProcessingApiResponse,
-    { status: options?.status ?? 400 }
+function isSupportedDocument(file: File) {
+  return (
+    file.type === "application/pdf" ||
+    file.type.startsWith("image/") ||
+    file.name.toLowerCase().endsWith(".pdf")
   );
+}
+
+function applyPreferredProfessional(
+  extraction: ReceiptExtraction,
+  preferredProfessionalId: string,
+  preferredProfessionalName: string,
+  professionals: Professional[]
+) {
+  const preferredProfessional =
+    professionals.find((item) => item.id === preferredProfessionalId) ?? null;
+  const nextWarnings = [...extraction.warnings];
+
+  if (
+    extraction.professionalName &&
+    extraction.professionalName.trim() &&
+    extraction.professionalName.trim() !== preferredProfessionalName.trim()
+  ) {
+    nextWarnings.push(
+      `Se priorizó el profesional seleccionado en la tarjeta (${preferredProfessionalName}).`
+    );
+  }
+
+  const inferredBranchName =
+    !extraction.branchName && preferredProfessional?.branchIds.length === 1
+      ? branches.find((branch) => branch.id === preferredProfessional.branchIds[0])?.name ?? null
+      : extraction.branchName;
+
+  return {
+    ...extraction,
+    professionalName: preferredProfessionalName,
+    branchName: inferredBranchName,
+    warnings: nextWarnings,
+  };
 }
 
 export async function POST(request: Request) {
   try {
-    const contentType = request.headers.get("content-type") ?? "";
-
-    console.info("[receipt-parser] api_request_started", {
-      contentType,
-    });
-
-    if (!contentType.toLowerCase().includes("multipart/form-data")) {
-      return buildErrorResponse(
-        "La solicitud no fue enviada como formulario multipart.",
-        "invalid_content_type",
-        "request_validation",
-        {
-          status: 400,
-          warnings: [`Content-Type recibido: ${contentType || "vacío"}`],
-        }
-      );
-    }
-
-    let formData: FormData;
-
-    try {
-      formData = await request.formData();
-    } catch (error) {
-      console.error("[receipt-parser] formdata_parse_failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      return buildErrorResponse(
-        "No pude leer el formulario del archivo enviado.",
-        "formdata_parse_failed",
-        "request_validation",
-        {
-          status: 400,
-          warnings: [
-            error instanceof Error
-              ? error.message
-              : "Error desconocido al leer formData().",
-          ],
-        }
-      );
-    }
-
+    const professionals = await getProfessionalsFromStorage();
+    const formData = await request.formData();
     const file = formData.get("file");
+    const preferredProfessionalId = String(
+      formData.get("preferredProfessionalId") ?? ""
+    ).trim();
+    const preferredProfessionalName = String(
+      formData.get("preferredProfessionalName") ?? ""
+    ).trim();
 
     if (!(file instanceof File)) {
-      return buildErrorResponse(
-        "Debes enviar un archivo PDF válido.",
-        "missing_file",
-        "request_validation",
+      return NextResponse.json(
         {
-          status: 400,
-          warnings: ["No se recibió ningún archivo en la solicitud."],
-        }
+          success: false,
+          error: "Debes adjuntar un PDF o una imagen.",
+          warnings: ["No se recibió ningún archivo."],
+          partial: {
+            source: "unknown",
+            extractedTextPreview: "",
+            extraction: null,
+          },
+        } satisfies ParseReceiptApiResponse,
+        { status: 400 }
       );
     }
 
-    if (!isPdfFile(file)) {
-      return buildErrorResponse(
-        "El archivo seleccionado no es un PDF válido.",
-        "invalid_file_type",
-        "request_validation",
+    if (!isSupportedDocument(file)) {
+      return NextResponse.json(
         {
-          status: 400,
+          success: false,
+          error: "Solo se admiten PDFs o imágenes para registrar ventas.",
+          warnings: [`Archivo recibido: ${file.name} (${file.type || "sin tipo"}).`],
+          partial: {
+            fileName: file.name,
+            source: "unknown",
+            extractedTextPreview: "",
+            extraction: null,
+          },
+        } satisfies ParseReceiptApiResponse,
+        { status: 400 }
+      );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    logParseReceiptEvent("document_received", {
+      fileName: file.name,
+      mimeType: file.type,
+      size: buffer.byteLength,
+    });
+
+    const textResult =
+      file.type.startsWith("image/") && !file.name.toLowerCase().endsWith(".pdf")
+        ? {
+            success: false as const,
+            text: "",
+            warnings: [
+              "La lectura tradicional no soporta imágenes sin OCR/IA activa.",
+            ],
+            error: "Documento de imagen sin OCR disponible.",
+            fileName: file.name,
+            strategy: "partial_rescue" as const,
+            confidence: 0,
+          }
+        : await extractReceiptText(buffer, file.name);
+
+    const warnings = [...textResult.warnings];
+    const rawText = textResult.text;
+    let extraction: ReceiptExtraction | null = null;
+
+    if (rawText && textResult.success) {
+      try {
+        logParseReceiptEvent("pdf_text_extraction", {
           fileName: file.name,
-          warnings: [
-            `Tipo recibido: ${file.type || "desconocido"}. Nombre: ${file.name}.`,
-          ],
-        }
-      );
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-
-    console.info("[receipt-parser] api_file_received", {
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      byteLength: arrayBuffer.byteLength,
-    });
-
-    if (!arrayBuffer.byteLength) {
-      return buildErrorResponse(
-        "El archivo PDF está vacío.",
-        "empty_file",
-        "request_validation",
-        {
-          status: 400,
+          strategy: textResult.strategy,
+          confidence: textResult.confidence,
+        });
+        const parsedReceipt = parseReceiptText(rawText, {
           fileName: file.name,
-          warnings: ["El archivo fue recibido pero no contiene bytes."],
-        }
-      );
-    }
-
-    const result = await processReceiptBuffer(Buffer.from(arrayBuffer), {
-      fileName: file.name,
-    });
-
-    console.info("[receipt-parser] api_processing_finished", {
-      fileName: file.name,
-      success: result.success,
-      status: result.success ? 200 : 422,
-      code: result.success ? "ok" : result.code,
-    });
-
-    return NextResponse.json(result, {
-      status: result.success ? 200 : 422,
-    });
-  } catch (error) {
-    console.error("[receipt-parser] api_unhandled_error", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    return buildErrorResponse(
-      "No pude procesar la boleta por un error interno.",
-      "unhandled_route_error",
-      "request_validation",
-      {
-        status: 500,
-        warnings: [
+        });
+        extraction = normalizeParsedReceiptData(parsedReceipt);
+      } catch (error) {
+        warnings.push(
           error instanceof Error
             ? error.message
-            : "Error no identificado en el endpoint.",
-        ],
+            : "La lectura estructurada fue incompleta."
+        );
+        extraction = await extractReceiptWithAI({
+          rawText,
+          fileBuffer: buffer,
+          fileName: file.name,
+          mimeType: file.type || "application/pdf",
+        });
       }
+    }
+
+    if (!extraction) {
+      logParseReceiptEvent("ai_fallback", {
+        fileName: file.name,
+        reason: textResult.error ?? "low_confidence_or_no_text",
+        strategy: textResult.strategy,
+        confidence: textResult.confidence,
+      });
+
+      extraction = await extractReceiptWithAI({
+        rawText,
+        fileBuffer: buffer,
+        fileName: file.name,
+        mimeType:
+          file.type ||
+          (file.name.toLowerCase().endsWith(".pdf")
+            ? "application/pdf"
+            : "application/octet-stream"),
+      });
+    }
+
+    if (extraction) {
+      const extractionWithProfessional =
+        preferredProfessionalId && preferredProfessionalName
+          ? applyPreferredProfessional(
+              extraction,
+              preferredProfessionalId,
+              preferredProfessionalName,
+              professionals
+            )
+          : extraction;
+
+      logParseReceiptEvent("partial_rescue", {
+        fileName: file.name,
+        extractedBy: extractionWithProfessional.extractedBy,
+        source: extractionWithProfessional.source,
+        confidence: extractionWithProfessional.confidence,
+        items: extractionWithProfessional.items.length,
+        preferredProfessionalName: preferredProfessionalName || null,
+      });
+
+      const { draft, totals } = recalculateSaleDraft(
+        createSaleDraftFromExtraction({
+          ...extractionWithProfessional,
+          warnings: [...extractionWithProfessional.warnings, ...warnings],
+        })
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          extraction: {
+            ...extractionWithProfessional,
+            warnings: [...extractionWithProfessional.warnings, ...warnings],
+          },
+          draft,
+          totals,
+        },
+        warnings: [...extractionWithProfessional.warnings, ...warnings],
+      } satisfies ParseReceiptApiResponse);
+    }
+
+    return NextResponse.json({
+      success: false,
+      error:
+        textResult.error ??
+        "No se pudo leer el documento, pero puedes registrar la venta manualmente.",
+      warnings,
+      partial: {
+        fileName: file.name,
+        source: "unknown",
+        extractedTextPreview: rawText.slice(0, 500),
+        extraction: null,
+      },
+    } satisfies ParseReceiptApiResponse);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Ocurrió un error inesperado al procesar la boleta.",
+        warnings: [
+          error instanceof Error ? error.message : "Error no identificado.",
+        ],
+        partial: {
+          source: "unknown",
+          extractedTextPreview: "",
+          extraction: null,
+        },
+      } satisfies ParseReceiptApiResponse,
+      { status: 500 }
     );
   }
 }

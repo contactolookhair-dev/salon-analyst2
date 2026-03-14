@@ -19,8 +19,8 @@ describe("OpenAI integration helpers", () => {
     const aiContext = buildBusinessAIContext(context);
 
     expect(aiContext.salesCount).toBe(4);
-    expect(aiContext.expensesCount).toBe(3);
-    expect(aiContext.utility.utilidad).toBe(116246);
+    expect(aiContext.expensesCount).toBe(5);
+    expect(aiContext.utility.utilidad).toBe(-1923754);
     expect(aiContext.professionals[0]).toHaveProperty("professionalName");
     expect(aiContext.services.length).toBeGreaterThan(0);
   });

@@ -41,11 +41,21 @@ function extractUnit(rawText: string): QuantityUnit | undefined {
   return undefined;
 }
 
+function sanitizeExtractedText(value: string) {
+  const sanitizedValue = normalizeWhitespace(value);
+
+  if (!sanitizedValue || /^null$/i.test(sanitizedValue) || /^undefined$/i.test(sanitizedValue)) {
+    return "";
+  }
+
+  return sanitizedValue;
+}
+
 function extractClient(rawText: string) {
   const labeledClient = extractValue(rawText, ["Cliente", "Client"]);
 
   if (labeledClient) {
-    return labeledClient;
+    return sanitizeExtractedText(labeledClient);
   }
 
   const lines = rawText
@@ -55,7 +65,7 @@ function extractClient(rawText: string) {
   const clientLabelIndex = lines.findIndex((line) => /^cliente$/i.test(line));
 
   if (clientLabelIndex >= 0 && lines[clientLabelIndex + 1]) {
-    return lines[clientLabelIndex + 1];
+    return sanitizeExtractedText(lines[clientLabelIndex + 1]);
   }
 
   return "Cliente no identificado";
@@ -79,38 +89,38 @@ function extractDate(rawText: string) {
   return "";
 }
 
-function extractServiceLine(rawText: string) {
-  const labeledService = extractValue(rawText, [
-    "Servicio",
-    "Service",
-    "Treatment",
-  ]);
+function extractServiceLines(rawText: string) {
+  const labeledService = extractValue(rawText, ["Servicio", "Service", "Treatment"]);
 
   if (labeledService) {
-    return {
-      rawName: labeledService,
-      lineTotal:
-        extractCurrency(extractValue(rawText, ["Precio", "Price", "Subtotal"])) ||
-        extractCurrency(extractValue(rawText, ["Total", "Total a pagar"])),
-    };
+    const lineTotal =
+      extractCurrency(extractValue(rawText, ["Precio", "Price", "Subtotal"])) ||
+      extractCurrency(extractValue(rawText, ["Total", "Total a pagar"]));
+
+    return [
+      {
+        rawName: sanitizeExtractedText(labeledService),
+        quantity: extractQuantity(rawText),
+        unit: extractUnit(rawText),
+        lineTotal,
+      },
+    ];
   }
 
-  const saleLineMatch = rawText.match(
-    /(?:^|\n)(\d+)\s+(.+?)\s+\$\s*([\d.,]+)(?:\n|$)/m
+  const lineMatches = Array.from(
+    rawText.matchAll(/(?:^|\n)(\d+)\s+(.+?)\s+\$\s*([\d.,]+)(?:\n|$)/gm)
   );
 
-  if (!saleLineMatch) {
-    return null;
-  }
-
-  return {
-    rawName: normalizeWhitespace(saleLineMatch[2]),
-    lineTotal: extractCurrency(saleLineMatch[3]),
-  };
+  return lineMatches.map((match) => ({
+    rawName: sanitizeExtractedText(match[2]),
+    quantity: Number(match[1]) || 1,
+    unit: extractUnit(match[2]),
+    lineTotal: extractCurrency(match[3]),
+  }));
 }
 
 export function parseFreshaReceipt(rawText: string): ParsedReceiptDocument {
-  const serviceLine = extractServiceLine(rawText);
+  const serviceLines = extractServiceLines(rawText);
   const totalDocument = extractCurrency(
     extractValue(rawText, ["Total", "Total a pagar", "Amount paid"])
   );
@@ -119,8 +129,11 @@ export function parseFreshaReceipt(rawText: string): ParsedReceiptDocument {
     extractKnownBranch(rawText);
   const date = extractDate(rawText);
   const observations: string[] = [];
+  const professionalName = sanitizeExtractedText(
+    extractValue(rawText, ["Profesional", "Staff", "Employee"])
+  );
 
-  if (!serviceLine?.rawName) {
+  if (!serviceLines.length) {
     observations.push("No se pudo detectar el nombre del servicio o producto.");
   }
 
@@ -128,7 +141,7 @@ export function parseFreshaReceipt(rawText: string): ParsedReceiptDocument {
     observations.push("No se pudo detectar la sucursal en la boleta.");
   }
 
-  if (!extractValue(rawText, ["Profesional", "Staff", "Employee"])) {
+  if (!professionalName) {
     observations.push("No se pudo detectar el profesional en la boleta.");
   }
 
@@ -140,19 +153,15 @@ export function parseFreshaReceipt(rawText: string): ParsedReceiptDocument {
     source: "fresha",
     date,
     branchName,
-    professionalName: extractValue(rawText, ["Profesional", "Staff", "Employee"]),
+    professionalName,
     clientName: extractClient(rawText),
-    items: serviceLine
-      ? [
-          {
-            rawName: serviceLine.rawName,
-            quantity: extractQuantity(rawText),
-            unit: extractUnit(rawText),
-            lineTotal: serviceLine.lineTotal || totalDocument,
-            notes: extractValue(rawText, ["Observaciones", "Notes"]),
-          },
-        ]
-      : [],
+    items: serviceLines.map((serviceLine) => ({
+      rawName: serviceLine.rawName,
+      quantity: serviceLine.quantity,
+      unit: serviceLine.unit,
+      lineTotal: serviceLine.lineTotal || totalDocument,
+      notes: extractValue(rawText, ["Observaciones", "Notes"]),
+    })),
     totalDocument,
     observations,
     rawText,

@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -9,6 +10,16 @@ import {
 } from "react";
 
 import type { BranchFilter } from "@/shared/types/business";
+
+const BRANCH_SELECTION_STORAGE_KEY = "salon-analyst2-selected-branch";
+
+function isValidBranchFilter(value: string | null): value is BranchFilter {
+  return (
+    value === "all" ||
+    value === "house-of-hair" ||
+    value === "look-hair-extensions"
+  );
+}
 
 type BranchContextValue = {
   branch: BranchFilter;
@@ -19,6 +30,28 @@ const BranchContext = createContext<BranchContextValue | null>(null);
 
 export function BranchProvider({ children }: PropsWithChildren) {
   const [branch, setBranch] = useState<BranchFilter>("all");
+
+  useEffect(() => {
+    try {
+      const storedBranch = window.localStorage.getItem(
+        BRANCH_SELECTION_STORAGE_KEY
+      );
+
+      if (isValidBranchFilter(storedBranch)) {
+        setBranch(storedBranch);
+      }
+    } catch {
+      // Ignore local storage access failures and keep the default branch.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BRANCH_SELECTION_STORAGE_KEY, branch);
+    } catch {
+      // Ignore local storage access failures and keep the in-memory branch.
+    }
+  }, [branch]);
 
   const value = useMemo(
     () => ({
@@ -42,4 +75,3 @@ export function useBranch() {
 
   return context;
 }
-

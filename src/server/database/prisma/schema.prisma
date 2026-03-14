@@ -7,22 +7,32 @@ datasource db {
 }
 
 model Branch {
-  id            String         @id
-  name          String         @unique
-  professionals Professional[]
-  sales         Sale[]
-  expenses      Expense[]
+  id                   String         @id
+  name                 String         @unique
+  primaryProfessionals Professional[] @relation("ProfessionalPrimaryBranch")
+  sales                Sale[]
+  expenses             Expense[]
 }
 
 model Professional {
-  id       String @id
-  name     String
-  branchId String
-  role     String?
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  sales    Sale[]
+  id              String                     @id
+  name            String
+  role            String?
+  primaryBranchId String?
+  branchIdsJson   String                     @default("[]")
+  active          Boolean                    @default(true)
+  commissionMode  ProfessionalCommissionMode @default(SYSTEM_RULES)
+  commissionValue Int?
+  phone           String?
+  email           String?
+  notes           String?
+  avatarColor     String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @default(now()) @updatedAt
+  primaryBranch   Branch?                    @relation("ProfessionalPrimaryBranch", fields: [primaryBranchId], references: [id], onDelete: SetNull)
+  sales           Sale[]
 
-  @@index([branchId])
+  @@index([primaryBranchId])
 }
 
 model Service {
@@ -54,12 +64,28 @@ model Sale {
 }
 
 model Expense {
-  id       String   @id
-  date     DateTime
-  branchId String
-  category String
-  amount   Int
-  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id        String      @id
+  title     String      @default("Gasto")
+  type      ExpenseType @default(VARIABLE)
+  date      DateTime
+  branchId  String
+  category  String
+  amount    Int
+  monthlyAmount Int?
+  active    Boolean     @default(true)
+  prorationMode ExpenseProrationMode?
+  paymentStatus PaymentStatus @default(PENDING)
+  paidAmount Int @default(0)
+  paidDate DateTime?
+  paymentMethod String?
+  paymentNote String?
+  paymentProofName String?
+  paymentProofDataUrl String?
+  dueDate DateTime?
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+  branch    Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([branchId])
@@ -68,4 +94,28 @@ model Expense {
 enum CommissionType {
   PERCENTAGE
   FIXED
+}
+
+enum ExpenseType {
+  FIXED
+  VARIABLE
+}
+
+enum ExpenseProrationMode {
+  CALENDAR_DAYS
+  OPERATING_DAYS
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum ProfessionalCommissionMode {
+  SYSTEM_RULES
+  PERCENTAGE
+  FIXED
+  MIXED
+  NONE
 }

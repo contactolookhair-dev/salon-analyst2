@@ -6,6 +6,7 @@ import {
   Bot,
   ChartNoAxesCombined,
   LayoutGrid,
+  Users,
   Receipt,
   Settings,
   WalletCards,
@@ -16,6 +17,7 @@ import { cn } from "@/shared/lib/utils";
 const navigation = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
   { href: "/ventas", label: "Ventas", icon: WalletCards },
+  { href: "/equipo", label: "Equipo", icon: Users },
   { href: "/gastos", label: "Gastos", icon: Receipt },
   { href: "/estadisticas", label: "Estadísticas", icon: ChartNoAxesCombined },
   { href: "/configuracion", label: "Configuración", icon: Settings },

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getBusinessSnapshot } from "@/features/dashboard/data/mock-dashboard";
 import type { BusinessSnapshot } from "@/features/dashboard/data/mock-dashboard";
+import { subscribeBusinessSnapshotRefresh } from "@/shared/lib/business-snapshot-events";
 import type { BranchFilter } from "@/shared/types/business";
 
 export function useBusinessSnapshot(branch: BranchFilter) {
@@ -35,6 +36,12 @@ export function useBusinessSnapshot(branch: BranchFilter) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    return subscribeBusinessSnapshotRefresh(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   return {

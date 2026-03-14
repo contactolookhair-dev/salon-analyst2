@@ -13,12 +13,12 @@ describe("processParsedSale", () => {
       clientName: "Camila",
       items: [
         {
-          rawName: "BALAYAGE PREMIUM",
+          rawName: "BALAYAGE - From",
           quantity: 1,
-          lineTotal: 148000,
+          lineTotal: 120000,
         },
       ],
-      totalDocument: 148000,
+      totalDocument: 120000,
       observations: [],
       rawText: "mock",
     };
@@ -28,14 +28,14 @@ describe("processParsedSale", () => {
     expect(result.reviewRequired).toBe(false);
     expect(result.branchName).toBe("House Of Hair");
     expect(result.items[0]).toMatchObject({
-      matchedCatalogName: "Balayage Premium",
-      net: 124370,
-      vat: 23630,
+      matchedCatalogName: "BALAYAGE - From",
+      net: 100840,
+      vat: 19160,
       commissionType: "percent",
-      commissionValue: 0.4,
-      commissionAmount: 49748,
-      totalCost: 22000,
-      profit: 52622,
+      commissionValue: 0.3,
+      commissionAmount: 30252,
+      totalCost: 20000,
+      profit: 50588,
       status: "matched",
     });
   });

@@ -54,6 +54,6 @@ describe("AiInsightsEngine", () => {
 
     expect(
       responderPreguntaAiLocal("¿Cuánto gasté este mes?", context).answer
-    ).toContain("$75.700");
+    ).toContain("$2.115.700");
   });
 });

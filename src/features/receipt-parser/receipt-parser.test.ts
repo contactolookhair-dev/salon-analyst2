@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { createSaleDraftFromExtraction } from "@/features/sales-register/lib/match-receipt-catalog";
+import { normalizeParsedReceiptData } from "@/features/sales-register/lib/normalize-receipt-data";
 import {
   detectReceiptProvider,
   processReceiptBuffer,
@@ -48,15 +50,15 @@ Total: $45.000`);
     expect(result.processedSale.professionalName).toBe("Darling");
     expect(result.processedSale.reviewRequired).toBe(false);
     expect(result.processedSale.items[0]).toMatchObject({
-      matchedCatalogName: "Mantención de Extension Adhesiva",
+      matchedCatalogName: "MANTENCIÓN DE EXTENSION ADHESIVA",
       quantity: 1,
       gross: 45000,
       net: 37815,
       vat: 7185,
-      commissionType: "fixed",
-      commissionAmount: 8000,
-      totalCost: 12000,
-      profit: 17815,
+      commissionType: "percent",
+      commissionAmount: 15126,
+      totalCost: 500,
+      profit: 22189,
       status: "matched",
     });
   });
@@ -119,6 +121,60 @@ Crédito $289,990.00`);
       quantity: 1,
       lineTotal: 289990,
     });
+  });
+
+  it("mejora el parseo de Fresha real con multiples items y profesional vacio", () => {
+    const result = processReceiptText(`House of Hair
+House of Hair
+Sale 251
+Friday, 13 Mar 2026 en 17:10
+Cliente
+Leonardo Morgado
+1 Protesis Premium 4k Tono #1 $489,990.00
+1 Removedor de extensiones adhesivas $12,990.00
+1 Cinta adhesivas pequeña $6,990.00
+1 Hairtech $34,990.00
+House of Hair
+Subtotal $457,949.58
+Iva 19% $87,010.42
+Total $544,960.00
+Crédito $544,960.00`);
+
+    expect(result.parsedReceipt).toMatchObject({
+      source: "fresha",
+      branchName: "House Of Hair",
+      clientName: "Leonardo Morgado",
+      professionalName: "",
+      date: "2026-03-13",
+      totalDocument: 544960,
+    });
+    expect(result.parsedReceipt.items).toHaveLength(4);
+    expect(result.parsedReceipt.items.map((item) => item.rawName)).toEqual([
+      "Protesis Premium 4k Tono #1",
+      "Removedor de extensiones adhesivas",
+      "Cinta adhesivas pequeña",
+      "Hairtech",
+    ]);
+
+    const draft = createSaleDraftFromExtraction(
+      normalizeParsedReceiptData(result.parsedReceipt)
+    );
+
+    expect(draft.professionalName).toBe("");
+    expect(draft.receiptNumber).toBe("");
+    expect(draft.paymentMethod).toBe("");
+    expect(draft.items.map((item) => item.matchedCatalogId)).toEqual([
+      "protesis-premium-4k-tono-1",
+      "removedor-de-extensiones-adhesivas",
+      "cinta-adhesivas-pequena",
+      "hairtech",
+    ]);
+    expect(draft.items.map((item) => item.itemType)).toEqual([
+      "product",
+      "product",
+      "product",
+      "product",
+    ]);
   });
 
   it("parsea un formato real de AgendaPro con multiples lineas", () => {

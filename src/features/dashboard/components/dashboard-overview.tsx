@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { BarChart3, Coins, HandCoins, Wallet } from "lucide-react";
 
 import { AiAnalystSection } from "@/features/ai-analyst/components/ai-analyst-section";
+import { branches as baseBranches } from "@/features/branches/data/mock-branches";
+import { loadEditableBranches } from "@/features/branches/lib/branch-config-storage";
 import { BusinessChartsSection } from "@/features/business-charts/business-charts-section";
 import { PredictionCard } from "@/features/business-predictions/prediction-card";
 import { CeoAiSection } from "@/features/ceo-ai/components/ceo-ai-section";
@@ -22,8 +25,14 @@ import { formatCurrency, formatPercent } from "@/shared/lib/utils";
 export function DashboardOverview() {
   const { branch: selectedBranch } = useBranch();
   const { snapshot: filteredSnapshot } = useBusinessSnapshot(selectedBranch);
+  const [branchConfigs, setBranchConfigs] = useState(baseBranches);
+
+  useEffect(() => {
+    setBranchConfigs(loadEditableBranches());
+  }, []);
+
   const { branch, metrics, salesByProfessional, branchExpenses } =
-    getDashboardDataFromSnapshot(filteredSnapshot, selectedBranch);
+    getDashboardDataFromSnapshot(filteredSnapshot, selectedBranch, branchConfigs);
 
   return (
     <section className="space-y-6">
@@ -49,12 +58,17 @@ export function DashboardOverview() {
                 Avance meta diaria
               </p>
               <p className="mt-3 text-3xl font-semibold">
-                {formatPercent(metrics.progress)}
+                {!metrics.commercialTargetApplies
+                  ? "Meta no exigible"
+                  : formatPercent(metrics.progress)}
               </p>
+              <p className="mt-2 text-sm text-white/60">{metrics.commercialStatusLabel}</p>
               <div className="mt-4 h-2 rounded-full bg-white/10">
                 <div
                   className="h-2 rounded-full bg-white"
-                  style={{ width: `${Math.min(metrics.progress * 100, 100)}%` }}
+                  style={{
+                    width: `${metrics.commercialTargetApplies ? Math.min(metrics.progress * 100, 100) : 0}%`,
+                  }}
                 />
               </div>
             </div>
@@ -71,7 +85,11 @@ export function DashboardOverview() {
         <MetricCard
           label="Ventas netas"
           value={formatCurrency(metrics.totalNetSales)}
-          helper="Ingreso neto del día sin IVA."
+          helper={
+            !metrics.commercialTargetApplies
+              ? "Sucursal cerrada hoy. Meta comercial no exigible."
+              : `Meta diaria comercial: ${formatCurrency(metrics.dailyTarget)}.`
+          }
           icon={<Wallet className="size-5" />}
         />
         <MetricCard
@@ -83,13 +101,17 @@ export function DashboardOverview() {
         <MetricCard
           label="Gastos del día"
           value={formatCurrency(metrics.totalExpenses)}
-          helper="Registro directo por sucursal."
+          helper={`Incluye ${formatCurrency(metrics.fixedExpensesToday)} fijo contable y ${formatCurrency(
+            metrics.recurringExpensesToday
+          )} de recurrentes prorrateados.`}
           icon={<Coins className="size-5" />}
         />
         <MetricCard
-          label="Utilidad del día"
-          value={formatCurrency(metrics.profit)}
-          helper="Venta neta menos comisiones, costos y gastos."
+          label="Resultado contable"
+          value={formatCurrency(metrics.accountingResult)}
+          helper={`Mes operativo: ${metrics.operatingDaysInMonth} días · meta mensual ${formatCurrency(
+            metrics.monthlyTarget
+          )}. ${metrics.commercialTargetApplies ? "Cumplimiento comercial activo." : "Gasto fijo del día aplicado aunque la sucursal esté cerrada."}`}
           icon={<BarChart3 className="size-5" />}
         />
       </div>

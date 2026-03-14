@@ -1,33 +1,204 @@
 import { NextResponse } from "next/server";
 
 import { createSaleInStorage } from "@/server/database/business-repository";
+import type {
+  PersistedSalePayload,
+  SaveSaleApiResponse,
+} from "@/features/sales-register/types";
 
 export const runtime = "nodejs";
 
+type LegacySalePayload = {
+  date: string;
+  branch: string;
+  professional: string;
+  professionalId?: string;
+  service: string;
+  total: number;
+  clientName?: string;
+  commission?: number;
+  profit?: number;
+  receiptNumber?: string;
+  confirmDuplicate?: boolean;
+};
+
+type PersistedSalePayloadLike = PersistedSalePayload & {
+  items?: Array<{
+    label?: string;
+    serviceLabel?: string;
+    total?: number;
+    grossTotal?: number;
+  }>;
+  serviceLabel?: string;
+  branchName?: string;
+  professionalName?: string;
+  professionalId?: string;
+  grossTotal?: number;
+  clientName?: string;
+  commissionTotal?: number;
+  profitTotal?: number;
+  receiptNumber?: string;
+  confirmDuplicate?: boolean;
+
+  // Campos que debe mandar la UI para tener prioridad real
+  branch?: string;
+  professional?: string;
+};
+
+function isPersistedSalePayload(
+  body: unknown
+): body is PersistedSalePayloadLike {
+  return typeof body === "object" && body !== null && "branchName" in body;
+}
+
+function safeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function safeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      date: string;
-      branch: string;
-      professional: string;
-      service: string;
-      total: number;
-      clientName?: string;
-    };
+    const body = (await request.json()) as
+      | LegacySalePayload
+      | PersistedSalePayloadLike;
 
-    const result = await createSaleInStorage(body);
+    const normalizedPayload: LegacySalePayload = isPersistedSalePayload(body)
+      ? {
+        date: safeString(body.date),
 
-    return NextResponse.json(result);
+        // PRIORIDAD: selector superior de la app
+        // Fallback: lo detectado por la boleta
+        branch: safeString(body.branch) || safeString(body.branchName),
+
+        // PRIORIDAD: bloque del profesional / UI
+        // Fallback: lo detectado por la boleta
+        professional:
+          safeString(body.professional) || safeString(body.professionalName),
+        professionalId: safeString(body.professionalId) || undefined,
+
+        service:
+          safeString(body.serviceLabel) ||
+          safeString(body.items?.[0]?.label) ||
+          safeString(body.items?.[0]?.serviceLabel) ||
+          "Servicio desde boleta",
+
+        total:
+          safeNumber(body.grossTotal) ||
+          body.items?.reduce((sum, item) => {
+            return sum + safeNumber(item.total) + safeNumber(item.grossTotal);
+          }, 0) ||
+          0,
+
+        clientName: safeString(body.clientName) || undefined,
+        commission: safeNumber(body.commissionTotal),
+        profit: safeNumber(body.profitTotal),
+        receiptNumber: safeString(body.receiptNumber) || undefined,
+        confirmDuplicate: Boolean(body.confirmDuplicate),
+      }
+      : {
+        date: safeString(body.date),
+        branch: safeString(body.branch),
+        professional: safeString(body.professional),
+        professionalId: safeString(body.professionalId) || undefined,
+        service: safeString(body.service),
+        total: safeNumber(body.total),
+        clientName: safeString(body.clientName) || undefined,
+        commission: safeNumber(body.commission),
+        profit: safeNumber(body.profit),
+        receiptNumber: safeString(body.receiptNumber) || undefined,
+        confirmDuplicate: Boolean(body.confirmDuplicate),
+      };
+
+    console.log("SALE_PAYLOAD_RAW", body);
+    console.log("SALE_PAYLOAD_NORMALIZED", normalizedPayload);
+
+    if (!normalizedPayload.date) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Falta fecha.",
+        } satisfies SaveSaleApiResponse,
+        { status: 400 }
+      );
+    }
+
+    if (!normalizedPayload.professional) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Falta profesional.",
+        } satisfies SaveSaleApiResponse,
+        { status: 400 }
+      );
+    }
+
+    if (!normalizedPayload.branch) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Falta sucursal.",
+        } satisfies SaveSaleApiResponse,
+        { status: 400 }
+      );
+    }
+
+    if (!normalizedPayload.service) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Falta servicio.",
+        } satisfies SaveSaleApiResponse,
+        { status: 400 }
+      );
+    }
+
+    if (!normalizedPayload.total || normalizedPayload.total <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "El total de la venta es inválido.",
+        } satisfies SaveSaleApiResponse,
+        { status: 400 }
+      );
+    }
+
+    const result = await createSaleInStorage(normalizedPayload);
+
+    console.log("SALE_SAVE_RESULT", result);
+
+    if ("duplicate" in result && result.duplicate) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.duplicate.message,
+          duplicate: result.duplicate,
+        } satisfies SaveSaleApiResponse,
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: result.usedFallbackDate
+        ? "Venta registrada usando la fecha de hoy por fallback."
+        : "Venta registrada correctamente.",
+      sale: result.sale,
+    } satisfies SaveSaleApiResponse);
   } catch (error) {
+    console.error("SALE_ERROR", error);
+
     return NextResponse.json(
       {
+        success: false,
         error:
           error instanceof Error
             ? error.message
             : "No pude registrar la venta.",
-      },
+      } satisfies SaveSaleApiResponse,
       { status: 500 }
     );
   }
 }
-

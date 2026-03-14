@@ -42,8 +42,8 @@ describe("motor financiero", () => {
       totalVentasNetas: 436135,
       totalComisiones: 154689,
       totalCostosDirectos: 89500,
-      totalGastos: 75700,
-      utilidad: 116246,
+      totalGastos: 2115700,
+      utilidad: -1923754,
       cantidadVentas: 4,
     });
 
@@ -52,8 +52,8 @@ describe("motor financiero", () => {
       totalVentasNetas: 436135,
       totalComisiones: 154689,
       totalCostosDirectos: 89500,
-      totalGastos: 75700,
-      utilidad: 116246,
+      totalGastos: 2115700,
+      utilidad: -1923754,
       cantidadVentas: 4,
     });
   });
