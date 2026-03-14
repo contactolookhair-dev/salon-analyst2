@@ -1,11 +1,12 @@
-import { PagePlaceholder } from "@/shared/components/layout/page-placeholder";
+"use client";
+
+import { StatisticsOverview } from "@/features/statistics/components/statistics-overview";
+import { useBranch } from "@/shared/context/branch-context";
+import { useBusinessSnapshot } from "@/shared/hooks/use-business-snapshot";
 
 export default function EstadisticasPage() {
-  return (
-    <PagePlaceholder
-      title="Estadísticas"
-      description="Aquí vivirá la capa analítica con tendencias, comparativas y márgenes por sucursal."
-    />
-  );
-}
+  const { branch } = useBranch();
+  const { snapshot } = useBusinessSnapshot(branch);
 
+  return <StatisticsOverview snapshot={snapshot} />;
+}

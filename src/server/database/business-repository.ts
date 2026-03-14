@@ -285,7 +285,9 @@ function mapProfessional(record: PrismaProfessional): Professional {
     commissionMode: mapProfessionalCommissionMode(record.commissionMode),
     commissionValue: record.commissionValue ?? undefined,
     phone: record.phone ?? undefined,
+    emergencyPhone: record.emergencyPhone ?? undefined,
     email: record.email ?? undefined,
+    documentId: record.documentId ?? undefined,
     notes: record.notes ?? undefined,
     avatarColor: record.avatarColor ?? undefined,
     createdAt: record.createdAt.toISOString(),
@@ -330,19 +332,18 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
       branch === "all" ? true : professional.branchIds.includes(branch)
     );
 
-  if (
-    saleRecords.length === 0 &&
-    expenseRecords.length === 0 &&
-    mappedProfessionals.length === 0
-  ) {
-    return null;
-  }
-
   return {
     branch,
     sales: saleRecords.map(mapSale),
     expenses: expenseRecords.map(mapExpense),
-    professionals: mappedProfessionals,
+    professionals:
+      mappedProfessionals.length > 0
+        ? mappedProfessionals
+        : branch === "all"
+          ? mockProfessionals
+          : mockProfessionals.filter((professional) =>
+              professional.branchIds.includes(branch)
+            ),
   };
 }
 
@@ -826,6 +827,135 @@ export async function deleteExpenseInStorage(input: { id: string }) {
   };
 }
 
+function getCurrentMonthUtcRange(referenceDate = new Date()) {
+  const year = referenceDate.getUTCFullYear();
+  const month = referenceDate.getUTCMonth();
+
+  return {
+    start: new Date(Date.UTC(year, month, 1, 0, 0, 0)),
+    end: new Date(Date.UTC(year, month + 1, 1, 0, 0, 0)),
+  };
+}
+
+async function cleanupOrphanServices(
+  tx: Pick<
+    NonNullable<ReturnType<typeof getDbClient>>,
+    "service"
+  >
+) {
+  const orphanServices = await tx.service.findMany({
+    where: {
+      sales: {
+        none: {},
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!orphanServices.length) {
+    return 0;
+  }
+
+  await tx.service.deleteMany({
+    where: {
+      id: {
+        in: orphanServices.map((service) => service.id),
+      },
+    },
+  });
+
+  return orphanServices.length;
+}
+
+export async function clearCurrentMonthSalesInStorage(referenceDate = new Date()) {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+      deletedSales: 0,
+      deletedOrphanServices: 0,
+    };
+  }
+
+  const { start, end } = getCurrentMonthUtcRange(referenceDate);
+
+  return db.$transaction(async (tx) => {
+    const deletedSalesResult = await tx.sale.deleteMany({
+      where: {
+        date: {
+          gte: start,
+          lt: end,
+        },
+      },
+    });
+
+    const deletedOrphanServices = await cleanupOrphanServices(tx);
+
+    return {
+      stored: true,
+      fallback: false,
+      deletedSales: deletedSalesResult.count,
+      deletedOrphanServices,
+    };
+  });
+}
+
+export async function clearAllExpensesInStorage() {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+      deletedExpenses: 0,
+    };
+  }
+
+  const deletedExpenses = await db.expense.deleteMany({});
+
+  return {
+    stored: true,
+    fallback: false,
+    deletedExpenses: deletedExpenses.count,
+  };
+}
+
+export async function resetTestDataInStorage() {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+      deletedSales: 0,
+      deletedExpenses: 0,
+      deletedAlerts: 0,
+      deletedOrphanServices: 0,
+    };
+  }
+
+  return db.$transaction(async (tx) => {
+    const [deletedSales, deletedExpenses, deletedAlerts] = await Promise.all([
+      tx.sale.deleteMany({}),
+      tx.expense.deleteMany({}),
+      tx.alertDispatch.deleteMany({}),
+    ]);
+
+    const deletedOrphanServices = await cleanupOrphanServices(tx);
+
+    return {
+      stored: true,
+      fallback: false,
+      deletedSales: deletedSales.count,
+      deletedExpenses: deletedExpenses.count,
+      deletedAlerts: deletedAlerts.count,
+      deletedOrphanServices,
+    };
+  });
+}
+
 export async function getProfessionalsFromStorage() {
   const db = getDbClient();
 
@@ -854,7 +984,9 @@ type SaveProfessionalInput = {
   commissionMode: ProfessionalCommissionMode;
   commissionValue?: number;
   phone?: string;
+  emergencyPhone?: string;
   email?: string;
+  documentId?: string;
   notes?: string;
   avatarColor?: string;
 };
@@ -889,7 +1021,9 @@ export async function createProfessionalInStorage(input: SaveProfessionalInput) 
                 : "SYSTEM_RULES",
       commissionValue: input.commissionValue ?? null,
       phone: input.phone?.trim() || null,
+      emergencyPhone: input.emergencyPhone?.trim() || null,
       email: input.email?.trim() || null,
+      documentId: input.documentId?.trim() || null,
       notes: input.notes?.trim() || null,
       avatarColor: input.avatarColor?.trim() || null,
     },
@@ -932,7 +1066,9 @@ export async function updateProfessionalInStorage(input: SaveProfessionalInput &
                 : "SYSTEM_RULES",
       commissionValue: input.commissionValue ?? null,
       phone: input.phone?.trim() || null,
+      emergencyPhone: input.emergencyPhone?.trim() || null,
       email: input.email?.trim() || null,
+      documentId: input.documentId?.trim() || null,
       notes: input.notes?.trim() || null,
       avatarColor: input.avatarColor?.trim() || null,
     },
@@ -955,34 +1091,17 @@ export async function deleteProfessionalInStorage(input: { id: string }) {
     };
   }
 
-  const salesCount = await db.sale.count({
-    where: { professionalId: input.id },
-  });
-
-  if (salesCount > 0) {
-    const professional = await db.professional.update({
-      where: { id: input.id },
-      data: { active: false },
-    });
-
-    return {
-      stored: true,
-      fallback: false,
-      deleted: false,
-      deactivated: true,
-      professional: mapProfessional(professional),
-    };
-  }
-
-  await db.professional.delete({
+  const professional = await db.professional.update({
     where: { id: input.id },
+    data: { active: false },
   });
 
   return {
     stored: true,
     fallback: false,
-    deleted: true,
-    deactivated: false,
+    deleted: false,
+    deactivated: true,
+    professional: mapProfessional(professional),
   };
 }
 
@@ -1003,6 +1122,9 @@ export async function ensureBranchesSeeded() {
     data: branchCatalog.map((branch) => ({
       id: branch.id,
       name: getBranchName(branch.id),
+      logoUrl: branch.logoUrl || null,
+      primaryColor: branch.primaryColor,
+      secondaryColor: branch.secondaryColor,
     })),
   });
 

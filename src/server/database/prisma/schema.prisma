@@ -9,6 +9,9 @@ datasource db {
 model Branch {
   id                   String         @id
   name                 String         @unique
+  logoUrl              String?
+  primaryColor         String?
+  secondaryColor       String?
   primaryProfessionals Professional[] @relation("ProfessionalPrimaryBranch")
   sales                Sale[]
   expenses             Expense[]
@@ -24,7 +27,9 @@ model Professional {
   commissionMode  ProfessionalCommissionMode @default(SYSTEM_RULES)
   commissionValue Int?
   phone           String?
+  emergencyPhone  String?
   email           String?
+  documentId      String?
   notes           String?
   avatarColor     String?
   createdAt       DateTime                   @default(now())
@@ -89,6 +94,38 @@ model Expense {
 
   @@index([date])
   @@index([branchId])
+}
+
+model DeviceToken {
+  id                String   @id
+  token             String   @unique
+  provider          String   @default("local")
+  deviceLabel       String?
+  branchPreference  String?
+  active            Boolean  @default(true)
+  alertCritical     Boolean  @default(true)
+  alertImportant    Boolean  @default(true)
+  alertPredictive   Boolean  @default(true)
+  dailySummary      Boolean  @default(false)
+  soundEnabled      Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+  lastSeenAt        DateTime @default(now())
+}
+
+model AlertDispatch {
+  id          String   @id
+  alertKey    String
+  alertType   String
+  branchId    String?
+  severity    String
+  title       String
+  body        String
+  deviceToken String?
+  sentAt      DateTime @default(now())
+
+  @@index([alertKey, sentAt])
+  @@index([deviceToken])
 }
 
 enum CommissionType {

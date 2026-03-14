@@ -144,3 +144,44 @@ body[data-branch-theme="look-hair-extensions"] input::placeholder,
 body[data-branch-theme="look-hair-extensions"] textarea::placeholder {
   color: var(--theme-text-auxiliary);
 }
+
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-950,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-900,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .font-medium.text-olive-950,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .font-semibold.text-olive-950,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] .text-olive-950,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] .text-olive-950,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#f7f4ea]"] .text-olive-950 {
+  color: #202020 !important;
+}
+
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-muted-foreground,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-700,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-600,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] .text-muted-foreground,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] .text-muted-foreground,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#f7f4ea]"] .text-muted-foreground {
+  color: #5f5f5f !important;
+}
+
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] label,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] input,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] select,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] textarea,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] label,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] label {
+  color: #202020 !important;
+}
+
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] input,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] select,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] textarea,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] input,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] select,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] textarea,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] input,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] select,
+body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] textarea {
+  color: #202020 !important;
+  -webkit-text-fill-color: #202020 !important;
+}

@@ -2,6 +2,18 @@ import { catalogItems, type CatalogItem } from "@/features/configuration/data/bu
 
 export const CATALOG_STORAGE_KEY = "salon-analyst2-catalog-overrides";
 
+function isValidCatalogOverride(item: CatalogItem) {
+  return (
+    typeof item?.id === "string" &&
+    item.id.trim().length > 0 &&
+    typeof item?.nombre === "string" &&
+    item.nombre.trim().length > 0 &&
+    typeof item?.nombre_normalizado === "string" &&
+    item.nombre_normalizado.trim().length > 0 &&
+    (item.tipo === "service" || item.tipo === "product")
+  );
+}
+
 export function loadEditableCatalog() {
   if (typeof window === "undefined") {
     return catalogItems;
@@ -20,8 +32,10 @@ export function loadEditableCatalog() {
       return catalogItems;
     }
 
+    const validOverrides = storedItems.filter(isValidCatalogOverride);
+
     return Array.from(
-      new Map([...catalogItems, ...storedItems].map((item) => [item.id, item])).values()
+      new Map([...catalogItems, ...validOverrides].map((item) => [item.id, item])).values()
     );
   } catch {
     return catalogItems;
@@ -40,4 +54,12 @@ export function saveEditableCatalog(items: CatalogItem[]) {
   });
 
   window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(overrides));
+}
+
+export function resetEditableCatalog() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(CATALOG_STORAGE_KEY);
 }

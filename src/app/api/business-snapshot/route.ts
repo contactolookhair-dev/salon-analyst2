@@ -5,23 +5,40 @@ import type { BranchFilter } from "@/shared/types/business";
 
 export const runtime = "nodejs";
 
+function normalizeBranchFilter(value: string | null): BranchFilter {
+  return value === "house-of-hair" ||
+    value === "look-hair-extensions" ||
+    value === "all"
+    ? value
+    : "all";
+}
+
+function createEmptySnapshot(branch: BranchFilter) {
+  return {
+    branch,
+    sales: [],
+    expenses: [],
+    professionals: [],
+  };
+}
+
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const branch = normalizeBranchFilter(searchParams.get("branch"));
+
   try {
-    const { searchParams } = new URL(request.url);
-    const branch = (searchParams.get("branch") ?? "all") as BranchFilter;
     const snapshot = await getBusinessSnapshotFromStorage(branch);
 
     return NextResponse.json(snapshot);
   } catch (error) {
+    console.error("[api/business-snapshot] snapshot_failed", {
+      branch,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "No pude cargar el snapshot del negocio.",
-      },
-      { status: 500 }
+      createEmptySnapshot(branch),
+      { status: 200 }
     );
   }
 }
-

@@ -76,4 +76,156 @@ describe("match receipt catalog", () => {
 
     expect(draft.professionalName).toBe("");
   });
+
+  it("aplica regla de adhesiva como lamina con costo unitario 500", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "fresha",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "1",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 170000,
+      netTotal: 0,
+      totalPaid: 170000,
+      currency: "CLP",
+      items: [
+        {
+          id: "adh-1",
+          name: "Extension adhesivas #1 x20",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 170000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    expect(draft.items[0].unitLabel).toBe("sheet");
+    expect(draft.items[0].unitCost).toBe(500);
+    expect(draft.items[0].quantity).toBe(20);
+  });
+
+  it("aplica regla de nano keratina como lamina con costo unitario 500", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "fresha",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "2",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 550000,
+      netTotal: 0,
+      totalPaid: 550000,
+      currency: "CLP",
+      items: [
+        {
+          id: "nano-1",
+          name: "Nano keratina premium x100",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 550000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    expect(draft.items[0].unitLabel).toBe("sheet");
+    expect(draft.items[0].unitCost).toBe(500);
+    expect(draft.items[0].quantity).toBe(100);
+  });
+
+  it("aplica regla de mantencion adhesiva como par con 40 por ciento", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "agendapro",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "3",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 8000,
+      netTotal: 0,
+      totalPaid: 8000,
+      currency: "CLP",
+      items: [
+        {
+          id: "maint-1",
+          name: "Mantencion de adhesiva 2 pares",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 8000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    expect(draft.items[0].unitLabel).toBe("pair");
+    expect(draft.items[0].commissionType).toBe("percentage");
+    expect(draft.items[0].commissionValue).toBe(40);
+    expect(draft.items[0].quantity).toBe(2);
+  });
+
+  it("no aplica 40 por ciento automatico a otras mantenciones", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "agendapro",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "4",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 30000,
+      netTotal: 0,
+      totalPaid: 30000,
+      currency: "CLP",
+      items: [
+        {
+          id: "maint-2",
+          name: "Mantencion nano",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 30000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    expect(draft.items[0].commissionValue).not.toBe(40);
+    expect(draft.items[0].unitLabel).toBe("sheet");
+  });
 });

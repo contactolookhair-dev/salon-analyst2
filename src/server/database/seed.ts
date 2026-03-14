@@ -13,6 +13,8 @@ async function main() {
   }
 
   await db.expense.deleteMany();
+  await db.alertDispatch.deleteMany();
+  await db.deviceToken.deleteMany();
   await db.sale.deleteMany();
   await db.professional.deleteMany();
   await db.service.deleteMany();
@@ -20,8 +22,18 @@ async function main() {
 
   await db.branch.createMany({
     data: [
-      { id: "house-of-hair", name: "House Of Hair" },
-      { id: "look-hair-extensions", name: "Look Hair Extensions" },
+      {
+        id: "house-of-hair",
+        name: "House Of Hair",
+        primaryColor: "#C6A96A",
+        secondaryColor: "#EDE5D8",
+      },
+      {
+        id: "look-hair-extensions",
+        name: "Look Hair Extensions",
+        primaryColor: "#C6A96A",
+        secondaryColor: "#1A1A1A",
+      },
     ],
   });
 

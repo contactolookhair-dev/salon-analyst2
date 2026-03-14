@@ -12,7 +12,7 @@ import type {
   ParseReceiptApiResponse,
   ReceiptExtraction,
 } from "@/features/sales-register/types";
-import type { Professional } from "@/shared/types/business";
+import type { BranchId, Professional } from "@/shared/types/business";
 
 export const runtime = "nodejs";
 
@@ -36,11 +36,15 @@ function applyPreferredProfessional(
   extraction: ReceiptExtraction,
   preferredProfessionalId: string,
   preferredProfessionalName: string,
+  preferredBranchId: string,
+  preferredBranchName: string,
   professionals: Professional[]
 ) {
   const preferredProfessional =
     professionals.find((item) => item.id === preferredProfessionalId) ?? null;
   const nextWarnings = [...extraction.warnings];
+  const originalDetectedProfessionalName = extraction.professionalName;
+  const originalDetectedBranchName = extraction.branchName;
 
   if (
     extraction.professionalName &&
@@ -52,8 +56,20 @@ function applyPreferredProfessional(
     );
   }
 
-  const inferredBranchName =
-    !extraction.branchName && preferredProfessional?.branchIds.length === 1
+  if (
+    preferredBranchName &&
+    extraction.branchName &&
+    extraction.branchName.trim() &&
+    extraction.branchName.trim() !== preferredBranchName.trim()
+  ) {
+    nextWarnings.push(
+      `Se priorizó la sucursal seleccionada en la carga (${preferredBranchName}).`
+    );
+  }
+
+  const inferredBranchName = preferredBranchName
+    ? preferredBranchName
+    : !extraction.branchName && preferredProfessional?.branchIds.length === 1
       ? branches.find((branch) => branch.id === preferredProfessional.branchIds[0])?.name ?? null
       : extraction.branchName;
 
@@ -76,6 +92,8 @@ export async function POST(request: Request) {
     const preferredProfessionalName = String(
       formData.get("preferredProfessionalName") ?? ""
     ).trim();
+    const preferredBranchId = String(formData.get("preferredBranchId") ?? "").trim();
+    const preferredBranchName = String(formData.get("preferredBranchName") ?? "").trim();
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -189,9 +207,23 @@ export async function POST(request: Request) {
               extraction,
               preferredProfessionalId,
               preferredProfessionalName,
+              preferredBranchId,
+              preferredBranchName,
               professionals
             )
           : extraction;
+      const parseContext = {
+        preferredProfessionalApplied:
+          Boolean(preferredProfessionalId && preferredProfessionalName),
+        originalDetectedProfessionalName: extraction.professionalName,
+        preferredBranchId:
+          preferredBranchId === "house-of-hair" ||
+          preferredBranchId === "look-hair-extensions"
+            ? (preferredBranchId as BranchId)
+            : null,
+        preferredBranchName: preferredBranchName || null,
+        originalDetectedBranchName: extraction.branchName,
+      };
 
       logParseReceiptEvent("partial_rescue", {
         fileName: file.name,
@@ -218,6 +250,7 @@ export async function POST(request: Request) {
           },
           draft,
           totals,
+          context: parseContext,
         },
         warnings: [...extractionWithProfessional.warnings, ...warnings],
       } satisfies ParseReceiptApiResponse);

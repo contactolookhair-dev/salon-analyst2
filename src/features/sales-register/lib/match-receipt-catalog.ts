@@ -5,6 +5,7 @@ import {
 } from "@/features/sales-register/lib/catalog-search";
 import type { ReceiptExtraction, SaleDraft, SaleLineDraft } from "@/features/sales-register/types";
 import { normalizeLooseName } from "@/shared/lib/normalize";
+import type { QuantityUnit } from "@/shared/types/sales-processing";
 
 function sanitizeNullableString(value: string | null | undefined) {
   if (!value || /^null$/i.test(value.trim()) || /^undefined$/i.test(value.trim())) {
@@ -36,6 +37,134 @@ function inferItemTypeFromName(name: string): "service" | "product" | "unknown" 
   return "unknown";
 }
 
+type BusinessRuleClassification =
+  | "adhesive_sheet"
+  | "nano_sheet"
+  | "adhesive_maintenance_pair"
+  | "generic_service"
+  | "generic_product";
+
+type QuantityDetection = {
+  quantity: number;
+  unitLabel?: QuantityUnit;
+  confidence: "high" | "low";
+  warning?: string;
+};
+
+function detectQuantityFromName(name: string, fallbackQuantity: number) {
+  const normalizedName = normalizeLooseName(name);
+  const directPatterns: Array<{ regex: RegExp; unitLabel?: QuantityUnit }> = [
+    { regex: /\b(\d+)\s*(laminas|lamina|láminas|lámina)\b/i, unitLabel: "sheet" },
+    { regex: /\bx\s*(\d+)\b/i },
+    { regex: /\b(\d+)\s*(pares|par)\b/i, unitLabel: "pair" },
+    { regex: /\b(\d+)\s*nano\b/i },
+  ];
+
+  for (const pattern of directPatterns) {
+    const match = normalizedName.match(pattern.regex);
+
+    if (match) {
+      return {
+        quantity: Math.max(Number(match[1]) || fallbackQuantity || 1, 1),
+        unitLabel: pattern.unitLabel,
+        confidence: "high" as const,
+      };
+    }
+  }
+
+  if (fallbackQuantity > 1) {
+    return {
+      quantity: fallbackQuantity,
+      confidence: "high" as const,
+    };
+  }
+
+  return {
+    quantity: Math.max(fallbackQuantity || 1, 1),
+    confidence: "low" as const,
+    warning: "No se pudo detectar la cantidad con confianza. Revísala manualmente.",
+  };
+}
+
+function classifyBusinessRule(name: string, inferredType: SaleLineDraft["itemType"]) {
+  const normalizedName = normalizeLooseName(name);
+  const mentionsAdhesive =
+    /(adhesiva|adhesivas|extension adhesiva|extensiones adhesivas|invisible premium|adhesiva invisible|tape|cinta adhesiva|cintas adhesivas)/.test(
+      normalizedName
+    );
+  const mentionsNano =
+    /(nano keratina|nano keratin|punto a punto nano|\bnano\b)/.test(normalizedName);
+  const adhesiveMaintenance =
+    /(mantencion|mantencion de|mantencion tape|mantencion de tape|mantencion extensiones adhesivas|mantencion extension adhesiva)/.test(
+      normalizedName
+    ) && mentionsAdhesive;
+
+  if (adhesiveMaintenance) {
+    return "adhesive_maintenance_pair" satisfies BusinessRuleClassification;
+  }
+
+  if (mentionsAdhesive) {
+    return "adhesive_sheet" satisfies BusinessRuleClassification;
+  }
+
+  if (mentionsNano) {
+    return "nano_sheet" satisfies BusinessRuleClassification;
+  }
+
+  return inferredType === "product" ? "generic_product" : "generic_service";
+}
+
+function applyBusinessFallbackRules(
+  baseLine: SaleLineDraft,
+  detectedName: string,
+  originalQuantity: number
+) {
+  const classification = classifyBusinessRule(detectedName, baseLine.itemType);
+  const quantityDetection = detectQuantityFromName(detectedName, originalQuantity);
+  const warnings = [...baseLine.warnings];
+
+  if (quantityDetection.warning) {
+    warnings.push(quantityDetection.warning);
+  }
+
+  let unitLabel = baseLine.unitLabel;
+  let unitCost = baseLine.unitCost;
+  let commissionType = baseLine.commissionType;
+  let commissionValue = baseLine.commissionValue;
+  let itemType = baseLine.itemType;
+
+  if (classification === "adhesive_sheet") {
+    unitLabel = "sheet";
+    unitCost = 500;
+    itemType = "product";
+  }
+
+  if (classification === "nano_sheet") {
+    unitLabel = "sheet";
+    unitCost = 500;
+    itemType = "product";
+  }
+
+  if (classification === "adhesive_maintenance_pair") {
+    unitLabel = "pair";
+    unitCost = unitCost || 500;
+    commissionType = "percentage";
+    commissionValue = 40;
+    itemType = "service";
+  }
+
+  return {
+    ...baseLine,
+    itemType,
+    quantity: quantityDetection.quantity,
+    unitLabel: quantityDetection.unitLabel ?? unitLabel,
+    unitCost,
+    commissionType,
+    commissionValue,
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
 function buildLineDraftFromCatalog(
   detectedName: string,
   quantity: number,
@@ -58,7 +187,7 @@ function buildLineDraftFromCatalog(
     warnings.push(missingConfigLabel);
   }
 
-  return {
+  const baseLine: SaleLineDraft = {
     id: `draft-line-${Math.random().toString(36).slice(2, 8)}`,
     inputName: detectedName,
     normalizedName: normalizeLooseName(detectedName),
@@ -89,6 +218,33 @@ function buildLineDraftFromCatalog(
     catalogItem,
     matchType: catalogItem ? matchType : "unmatched",
   };
+
+  if (catalogItem && matchType !== "suggested") {
+    return baseLine;
+  }
+
+  const fallbackLine = applyBusinessFallbackRules(
+    {
+      ...baseLine,
+      catalogItem: matchType === "suggested" ? null : baseLine.catalogItem,
+      matchedCatalogId: matchType === "suggested" ? null : baseLine.matchedCatalogId,
+      matchedCatalogName: matchType === "suggested" ? null : baseLine.matchedCatalogName,
+      commissionType: matchType === "suggested" ? "none" : baseLine.commissionType,
+      commissionValue: matchType === "suggested" ? 0 : baseLine.commissionValue,
+      unitCost: matchType === "suggested" ? 0 : baseLine.unitCost,
+      unitLabel: matchType === "suggested" ? "unit" : baseLine.unitLabel,
+      matchType: matchType === "suggested" ? "unmatched" : baseLine.matchType,
+      status: matchType === "suggested" ? "requires_review" : baseLine.status,
+      warnings:
+        matchType === "suggested"
+          ? Array.from(new Set([...baseLine.warnings, "Coincidencia sugerida: revisar antes de confirmar."]))
+          : baseLine.warnings,
+    },
+    detectedName,
+    quantity
+  );
+
+  return fallbackLine;
 }
 
 export function createSaleDraftFromExtraction(

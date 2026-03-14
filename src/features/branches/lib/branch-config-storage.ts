@@ -2,6 +2,7 @@ import { branches as baseBranches } from "@/features/branches/data/mock-branches
 import type { Branch } from "@/shared/types/business";
 
 const BRANCH_STORAGE_KEY = "salon-analyst2-branch-config";
+export const BRANCH_CONFIG_UPDATED_EVENT = "salon-analyst2-branch-config-updated";
 
 export function loadEditableBranches() {
   if (typeof window === "undefined") {
@@ -41,4 +42,5 @@ export function saveEditableBranches(branches: Branch[]) {
   });
 
   window.localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(overrides));
+  window.dispatchEvent(new CustomEvent(BRANCH_CONFIG_UPDATED_EVENT));
 }

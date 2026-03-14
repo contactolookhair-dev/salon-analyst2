@@ -101,6 +101,13 @@ export type ParseReceiptApiSuccess = {
     extraction: ReceiptExtraction;
     draft: SaleDraft;
     totals: SaleDraftTotals;
+    context?: {
+      preferredProfessionalApplied?: boolean;
+      originalDetectedProfessionalName?: string | null;
+      preferredBranchId?: BranchId | null;
+      preferredBranchName?: string | null;
+      originalDetectedBranchName?: string | null;
+    };
   };
   warnings: string[];
 };

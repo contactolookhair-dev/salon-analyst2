@@ -10,6 +10,9 @@ export type Branch = {
   id: BranchId;
   name: BranchName;
   city: string;
+  logoUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
   monthlyTarget: number;
   openDays: number[];
   operatesOnSundays: boolean;
@@ -36,7 +39,9 @@ export type Professional = {
   commissionMode: ProfessionalCommissionMode;
   commissionValue?: number;
   phone?: string;
+  emergencyPhone?: string;
   email?: string;
+  documentId?: string;
   notes?: string;
   avatarColor?: string;
   createdAt?: string;

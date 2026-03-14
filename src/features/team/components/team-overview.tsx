@@ -1,18 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, Package, Scissors, Wallet } from "lucide-react";
+import { CalendarDays, Download, FileUp, Package, PencilLine, Scissors, Wallet } from "lucide-react";
 
-import { branches } from "@/features/branches/data/mock-branches";
+import { BranchLogo } from "@/features/branches/components/branch-logo";
+import { branches as baseBranches } from "@/features/branches/data/mock-branches";
+import {
+  BRANCH_CONFIG_UPDATED_EVENT,
+  loadEditableBranches,
+} from "@/features/branches/lib/branch-config-storage";
+import { SalesEntryWorkspace } from "@/features/sales-register/components/sales-entry-workspace";
 import { Card } from "@/shared/components/ui/card";
+import { useBranch } from "@/shared/context/branch-context";
 import { formatCurrency } from "@/shared/lib/utils";
-import type { Professional, Sale } from "@/shared/types/business";
+import type { Branch, Professional, Sale } from "@/shared/types/business";
 
 const TEAM_DATE_RANGE_STORAGE_KEY = "salon-analyst2-team-date-range";
 
 type TeamOverviewProps = {
   professionals: Professional[];
   sales: Sale[];
+  onRegistered?: () => void;
 };
 
 type TeamDateRange = {
@@ -21,7 +29,10 @@ type TeamDateRange = {
 };
 
 type TeamProfessionalEntry = {
+  key: string;
   professional: Professional;
+  branchId: Branch["id"] | null;
+  branchName: string;
   sales: Sale[];
   grossTotal: number;
   commissionTotal: number;
@@ -106,10 +117,20 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function buildReportHtml(entry: TeamProfessionalEntry, range: TeamDateRange) {
-  const branchLabels = entry.professional.branchIds
-    .map((branchId) => branches.find((branch) => branch.id === branchId)?.name ?? branchId)
-    .join(" · ");
+function buildReportHtml(
+  entry: TeamProfessionalEntry,
+  range: TeamDateRange,
+  branchConfigs: Branch[],
+  selectedBranchId: Branch["id"] | "all"
+) {
+  const reportBranch =
+    entry.branchId
+      ? branchConfigs.find((branch) => branch.id === entry.branchId) ?? null
+      : selectedBranchId !== "all"
+      ? branchConfigs.find((branch) => branch.id === selectedBranchId) ?? null
+      : branchConfigs.find((branch) => branch.id === entry.professional.primaryBranchId) ??
+        branchConfigs.find((branch) => entry.professional.branchIds.includes(branch.id)) ??
+        null;
   const activeDays = entry.dailyHistory.length || 1;
   const averageSales = Math.round(entry.grossTotal / activeDays);
   const averageCommission = Math.round(entry.commissionTotal / activeDays);
@@ -164,6 +185,40 @@ function buildReportHtml(entry: TeamProfessionalEntry, range: TeamDateRange) {
           color: var(--muted);
           font-size: 14px;
           line-height: 1.5;
+        }
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+        .logo-box {
+          width: 88px;
+          height: 88px;
+          border-radius: 24px;
+          overflow: hidden;
+          border: 1px solid ${reportBranch?.primaryColor ?? "#d8dccd"}44;
+          background: linear-gradient(135deg, ${reportBranch?.secondaryColor ?? "#f7f4ea"} 0%, #ffffff 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .logo-box img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          padding: 10px;
+        }
+        .logo-fallback {
+          padding: 10px;
+          text-align: center;
+          font-size: 12px;
+          line-height: 1.3;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: ${reportBranch?.primaryColor ?? "#2f3626"};
         }
         .summary {
           display: grid;
@@ -228,12 +283,23 @@ function buildReportHtml(entry: TeamProfessionalEntry, range: TeamDateRange) {
     </head>
     <body>
       <article class="report">
-        <div class="eyebrow">SalonAnalyst2 · Informe individual</div>
-        <h1>${escapeHtml(entry.professional.name)}</h1>
-        <p class="subtle">
-          ${escapeHtml(entry.professional.role)} · ${escapeHtml(branchLabels || "General")}<br />
-          Rango analizado: ${escapeHtml(formatDateLabel(range.from))} al ${escapeHtml(formatDateLabel(range.to))}
-        </p>
+        <div class="header">
+          <div>
+            <div class="eyebrow">SalonAnalyst2 · Informe individual</div>
+            <h1>${escapeHtml(entry.professional.name)}</h1>
+            <p class="subtle">
+              ${escapeHtml(entry.professional.role)} · ${escapeHtml(entry.branchName || "General")}<br />
+              Rango analizado: ${escapeHtml(formatDateLabel(range.from))} al ${escapeHtml(formatDateLabel(range.to))}
+            </p>
+          </div>
+          <div class="logo-box">
+            ${
+              reportBranch?.logoUrl
+                ? `<img src="${escapeHtml(reportBranch.logoUrl)}" alt="Logo ${escapeHtml(reportBranch.name)}" />`
+                : `<div class="logo-fallback">${escapeHtml(reportBranch?.name ?? "Sucursal")}</div>`
+            }
+          </div>
+        </div>
 
         <section class="summary">
           <div class="card">
@@ -320,11 +386,26 @@ function buildReportHtml(entry: TeamProfessionalEntry, range: TeamDateRange) {
   </html>`;
 }
 
-export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
+export function TeamOverview({ professionals, sales, onRegistered }: TeamOverviewProps) {
+  const { branch: selectedBranch } = useBranch();
   const today = useMemo(() => getTodayChileDateString(), []);
+  const [branchConfigs, setBranchConfigs] = useState<Branch[]>(baseBranches);
   const [teamDateRange, setTeamDateRange] = useState<TeamDateRange>(() =>
     getDefaultTeamDateRange(today)
   );
+  const [expandedProfessionalId, setExpandedProfessionalId] = useState<string | null>(null);
+  const [expandedMode, setExpandedMode] = useState<"scan" | "manual">("scan");
+
+  useEffect(() => {
+    const syncBranches = () => setBranchConfigs(loadEditableBranches());
+
+    syncBranches();
+    window.addEventListener(BRANCH_CONFIG_UPDATED_EVENT, syncBranches);
+
+    return () => {
+      window.removeEventListener(BRANCH_CONFIG_UPDATED_EVENT, syncBranches);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -360,77 +441,89 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
 
   const teamSalesByProfessional = useMemo<TeamProfessionalEntry[]>(() => {
     return professionals
-      .map((professional) => {
-      const professionalSales = sales
-        .filter(
-          (sale) =>
-            sale.professionalId === professional.id &&
-            isSaleInRange(sale.saleDate, teamDateRange)
-        )
-        .sort((left, right) =>
-          `${right.saleDate}T${right.createdAt}`.localeCompare(
-            `${left.saleDate}T${left.createdAt}`
-          )
-        );
+      .flatMap((professional) => {
+        const branchContexts =
+          selectedBranch === "all"
+            ? professional.branchIds
+            : professional.branchIds.filter((branchId) => branchId === selectedBranch);
 
-      const grossTotal = professionalSales.reduce(
-        (total, sale) => total + sale.grossAmount,
-        0
-      );
-      const commissionTotal = professionalSales.reduce(
-        (total, sale) => total + sale.commissionValue,
-        0
-      );
-      const servicesCount = professionalSales.length;
-      const productsCount = professionalSales.filter((sale) => sale.productName).length;
-      const advancesTotal = 0;
-      const netToPay = Math.max(commissionTotal - advancesTotal, 0);
-      const dailyHistory = Array.from(
-        professionalSales.reduce(
-          (map, sale) => {
-            const current = map.get(sale.saleDate) ?? {
-              date: sale.saleDate,
-              grossTotal: 0,
-              commissionTotal: 0,
-              servicesCount: 0,
-              productsCount: 0,
-            };
+        return branchContexts.map((branchId) => {
+          const professionalSales = sales
+            .filter(
+              (sale) =>
+                sale.professionalId === professional.id &&
+                sale.branchId === branchId &&
+                isSaleInRange(sale.saleDate, teamDateRange)
+            )
+            .sort((left, right) =>
+              `${right.saleDate}T${right.createdAt}`.localeCompare(
+                `${left.saleDate}T${left.createdAt}`
+              )
+            );
 
-            current.grossTotal += sale.grossAmount;
-            current.commissionTotal += sale.commissionValue;
-            current.servicesCount += 1;
-            current.productsCount += sale.productName ? 1 : 0;
+          const grossTotal = professionalSales.reduce(
+            (total, sale) => total + sale.grossAmount,
+            0
+          );
+          const commissionTotal = professionalSales.reduce(
+            (total, sale) => total + sale.commissionValue,
+            0
+          );
+          const servicesCount = professionalSales.length;
+          const productsCount = professionalSales.filter((sale) => sale.productName).length;
+          const advancesTotal = 0;
+          const netToPay = Math.max(commissionTotal - advancesTotal, 0);
+          const dailyHistory = Array.from(
+            professionalSales.reduce(
+              (map, sale) => {
+                const current = map.get(sale.saleDate) ?? {
+                  date: sale.saleDate,
+                  grossTotal: 0,
+                  commissionTotal: 0,
+                  servicesCount: 0,
+                  productsCount: 0,
+                };
 
-            map.set(sale.saleDate, current);
-            return map;
-          },
-          new Map<
-            string,
-            {
-              date: string;
-              grossTotal: number;
-              commissionTotal: number;
-              servicesCount: number;
-              productsCount: number;
-            }
-          >()
-        ).values()
-      ).sort((left, right) => right.date.localeCompare(left.date));
+                current.grossTotal += sale.grossAmount;
+                current.commissionTotal += sale.commissionValue;
+                current.servicesCount += 1;
+                current.productsCount += sale.productName ? 1 : 0;
 
-        return {
-          professional,
-          sales: professionalSales,
-          grossTotal,
-          commissionTotal,
-          advancesTotal,
-          netToPay,
-          servicesCount,
-          productsCount,
-          dailyHistory,
-        };
+                map.set(sale.saleDate, current);
+                return map;
+              },
+              new Map<
+                string,
+                {
+                  date: string;
+                  grossTotal: number;
+                  commissionTotal: number;
+                  servicesCount: number;
+                  productsCount: number;
+                }
+              >()
+            ).values()
+          ).sort((left, right) => right.date.localeCompare(left.date));
+
+          return {
+            key: `${professional.id}-${branchId}`,
+            professional,
+            branchId,
+            branchName:
+              branchConfigs.find((branch) => branch.id === branchId)?.name ?? branchId,
+            sales: professionalSales,
+            grossTotal,
+            commissionTotal,
+            advancesTotal,
+            netToPay,
+            servicesCount,
+            productsCount,
+            dailyHistory,
+          };
+        });
       })
       .filter((entry) => entry.professional.active || entry.sales.length > 0);
-  }, [professionals, sales, teamDateRange]);
+  }, [branchConfigs, professionals, sales, selectedBranch, teamDateRange]);
 
   function handleExport(entry: TeamProfessionalEntry) {
     const reportWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=1080");
@@ -441,7 +534,9 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
     }
 
     reportWindow.document.open();
-    reportWindow.document.write(buildReportHtml(entry, teamDateRange));
+    reportWindow.document.write(
+      buildReportHtml(entry, teamDateRange, branchConfigs, selectedBranch)
+    );
     reportWindow.document.close();
     reportWindow.focus();
     reportWindow.print();
@@ -568,11 +663,14 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
         </div>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-2">
         {teamSalesByProfessional.map(
           (entry) => {
             const {
+            key,
             professional,
+            branchId,
+            branchName,
             sales: professionalSales,
             grossTotal,
             commissionTotal,
@@ -582,12 +680,6 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
             productsCount,
             dailyHistory,
             } = entry;
-            const professionalBranchLabels = professional.branchIds
-              .map(
-                (branchId) =>
-                  branches.find((branch) => branch.id === branchId)?.name ?? branchId
-              )
-              .join(" · ");
             const daysWithMovement = dailyHistory.length;
             const averageSales = daysWithMovement
               ? Math.round(grossTotal / daysWithMovement)
@@ -598,42 +690,80 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
 
             return (
               <div
-                key={professional.id}
+                key={key}
                 className="rounded-[30px] border border-olive-950/8 bg-[#fbfaf6] p-7 shadow-[0_18px_40px_rgba(42,45,31,0.08)]"
               >
-                <div className="flex flex-col gap-5 border-b border-olive-950/8 pb-6 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 space-y-3">
-                    <p className="text-[1.35rem] font-semibold leading-tight text-olive-950 break-words">
-                      {professional.name}
-                    </p>
-                    <p className="text-sm font-medium leading-relaxed text-muted-foreground break-words">
-                      {professional.role}
-                    </p>
-                    <div className="flex flex-wrap gap-2.5">
-                      {professional.branchIds.map((branchId) => {
-                        const branchLabel =
-                          branches.find((branch) => branch.id === branchId)?.name ?? branchId;
-
-                        return (
-                          <span
-                            key={`${professional.id}-${branchId}`}
-                            className="max-w-full rounded-full bg-white/90 px-3.5 py-1.5 text-xs font-semibold leading-relaxed text-olive-700"
-                          >
-                            {branchLabel}
+                <div className="flex flex-col gap-5 border-b border-olive-950/8 pb-6 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="flex min-w-0 flex-1 items-start gap-4">
+                    <BranchLogo
+                      branch={
+                        branchConfigs.find((branch) => branch.id === branchId) ??
+                        branchConfigs.find(
+                          (branch) =>
+                            branch.id === professional.primaryBranchId ||
+                            professional.branchIds.includes(branch.id)
+                        ) ??
+                        null
+                      }
+                      size="md"
+                      className="shrink-0"
+                    />
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <p className="text-[1.35rem] font-semibold leading-tight text-olive-950 break-normal">
+                        {professional.name}
+                      </p>
+                      <p className="text-sm font-medium leading-relaxed text-muted-foreground break-normal">
+                        {professional.role}
+                      </p>
+                      <div className="flex flex-wrap gap-2.5">
+                        <span className="max-w-full rounded-full bg-white/90 px-3.5 py-1.5 text-xs font-semibold leading-relaxed text-olive-700 whitespace-nowrap">
+                          {branchName}
+                        </span>
+                        {professional.branchIds.length > 1 ? (
+                          <span className="max-w-full rounded-full border border-olive-950/8 bg-[#f6f2ea] px-3.5 py-1.5 text-xs font-semibold leading-relaxed text-muted-foreground whitespace-nowrap">
+                            Liquidación separada por sucursal
                           </span>
-                        );
-                      })}
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleExport(entry)}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
-                  >
-                    <Download className="size-4" />
-                    Exportar PDF
-                  </button>
+                  <div className="flex w-full flex-wrap items-center gap-2.5 xl:w-auto xl:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedProfessionalId((current) =>
+                          current === key ? null : key
+                        );
+                        setExpandedMode("scan");
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-olive-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                    >
+                      <FileUp className="size-4" />
+                      Subir boleta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedProfessionalId((current) =>
+                          current === key ? null : key
+                        );
+                        setExpandedMode("manual");
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
+                    >
+                      <PencilLine className="size-4" />
+                      Registro manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExport(entry)}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
+                    >
+                      <Download className="size-4" />
+                      Exportar PDF
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-7 grid gap-4 xl:grid-cols-2">
@@ -746,7 +876,7 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
                         <div className="mt-4 space-y-3">
                           {dailyHistory.map((entry) => (
                             <div
-                              key={`${professional.id}-${entry.date}`}
+                              key={`${key}-${entry.date}`}
                               className="grid gap-4 rounded-[20px] bg-[#f7f4ea] px-4 py-4 text-sm lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.8fr)]"
                             >
                               <div className="min-w-0">
@@ -811,6 +941,23 @@ export function TeamOverview({ professionals, sales }: TeamOverviewProps) {
                     </div>
                   )}
                 </div>
+
+                {expandedProfessionalId === key ? (
+                  <div className="mt-7 border-t border-olive-950/8 pt-6">
+                    <SalesEntryWorkspace
+                      key={`${key}-${expandedMode}`}
+                      professionals={professionals}
+                      onRegistered={onRegistered}
+                      embeddedProfessional={{
+                        ...professional,
+                        branchIds: branchId ? [branchId] : professional.branchIds,
+                      }}
+                      defaultMode={expandedMode}
+                      layout="embedded"
+                      onClose={() => setExpandedProfessionalId(null)}
+                    />
+                  </div>
+                ) : null}
               </div>
             );
           }

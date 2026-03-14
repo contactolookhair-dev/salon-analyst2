@@ -1,13 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 
-import { branches } from "@/features/branches/data/mock-branches";
+import { branches as baseBranches } from "@/features/branches/data/mock-branches";
+import {
+  BRANCH_CONFIG_UPDATED_EVENT,
+  loadEditableBranches,
+} from "@/features/branches/lib/branch-config-storage";
 import { useBranch } from "@/shared/context/branch-context";
 import { cn } from "@/shared/lib/utils";
 
 export function BranchSelector() {
   const { branch, setBranch } = useBranch();
+  const [branches, setBranches] = useState(baseBranches);
+
+  useEffect(() => {
+    const syncBranches = () => setBranches(loadEditableBranches());
+
+    syncBranches();
+    window.addEventListener(BRANCH_CONFIG_UPDATED_EVENT, syncBranches);
+
+    return () => {
+      window.removeEventListener(BRANCH_CONFIG_UPDATED_EVENT, syncBranches);
+    };
+  }, []);
 
   return (
     <div className="relative">

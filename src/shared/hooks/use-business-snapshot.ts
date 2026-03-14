@@ -2,14 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { getBusinessSnapshot } from "@/features/dashboard/data/mock-dashboard";
 import type { BusinessSnapshot } from "@/features/dashboard/data/mock-dashboard";
 import { subscribeBusinessSnapshotRefresh } from "@/shared/lib/business-snapshot-events";
 import type { BranchFilter } from "@/shared/types/business";
 
+function createEmptySnapshot(branch: BranchFilter): BusinessSnapshot {
+  return {
+    branch,
+    sales: [],
+    expenses: [],
+    professionals: [],
+  };
+}
+
 export function useBusinessSnapshot(branch: BranchFilter) {
   const [snapshot, setSnapshot] = useState<BusinessSnapshot>(() =>
-    getBusinessSnapshot(branch)
+    createEmptySnapshot(branch)
   );
   const [isLoading, setIsLoading] = useState(false);
 
@@ -28,7 +36,7 @@ export function useBusinessSnapshot(branch: BranchFilter) {
       const payload = (await response.json()) as BusinessSnapshot;
       setSnapshot(payload);
     } catch {
-      setSnapshot(getBusinessSnapshot(branch));
+      setSnapshot(createEmptySnapshot(branch));
     } finally {
       setIsLoading(false);
     }

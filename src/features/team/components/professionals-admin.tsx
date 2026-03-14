@@ -22,7 +22,9 @@ type ProfessionalFormState = {
   commissionMode: ProfessionalCommissionMode;
   commissionValue: number;
   phone: string;
+  emergencyPhone: string;
   email: string;
+  documentId: string;
   notes: string;
   avatarColor: string;
 };
@@ -36,7 +38,9 @@ const emptyForm: ProfessionalFormState = {
   commissionMode: "system_rules",
   commissionValue: 0,
   phone: "",
+  emergencyPhone: "",
   email: "",
+  documentId: "",
   notes: "",
   avatarColor: "#7c6f4f",
 };
@@ -56,7 +60,9 @@ function createFormFromProfessional(professional?: Professional | null): Profess
     commissionMode: professional.commissionMode,
     commissionValue: professional.commissionValue ?? 0,
     phone: professional.phone ?? "",
+    emergencyPhone: professional.emergencyPhone ?? "",
     email: professional.email ?? "",
+    documentId: professional.documentId ?? "",
     notes: professional.notes ?? "",
     avatarColor: professional.avatarColor ?? "#7c6f4f",
   };
@@ -247,15 +253,15 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
   }
 
   function toggleBranch(branchId: BranchId) {
-    setForm((current) => ({
-      ...current,
-      branchIds: current.branchIds.includes(branchId)
-        ? current.branchIds.filter((item) => item !== branchId)
-        : [...current.branchIds, branchId],
-      primaryBranchId:
-        current.primaryBranchId && current.primaryBranchId !== branchId
-          ? current.primaryBranchId
-          : branchId,
+          setForm((current) => ({
+            ...current,
+            branchIds: current.branchIds.includes(branchId)
+              ? current.branchIds.filter((item) => item !== branchId)
+              : [...current.branchIds, branchId],
+            primaryBranchId:
+              current.primaryBranchId && current.primaryBranchId !== branchId
+                ? current.primaryBranchId
+                : branchId,
     }));
   }
 
@@ -427,6 +433,26 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
               />
             </label>
             <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">Número de emergencia</span>
+              <input
+                value={form.emergencyPhone}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, emergencyPhone: event.target.value }))
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">RUT o identificación</span>
+              <input
+                value={form.documentId}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, documentId: event.target.value }))
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              />
+            </label>
+            <label className="space-y-2 text-sm">
               <span className="font-medium text-olive-950">Email</span>
               <input
                 value={form.email}
@@ -493,7 +519,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
                 type="button"
                 onClick={() => void handleSubmit()}
                 disabled={isSaving || !form.name.trim() || form.branchIds.length === 0}
-                className="rounded-full bg-olive-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-full bg-olive-950 px-5 py-2 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(42,45,31,0.18)] disabled:opacity-60"
               >
                 {isSaving ? "Guardando..." : form.id ? "Guardar cambios" : "Guardar profesional"}
               </button>
@@ -542,7 +568,9 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
                 <p>{branchLabels || "General"}</p>
                 <p>Comisión: {professional.commissionMode}</p>
                 {professional.phone ? <p>{professional.phone}</p> : null}
+                {professional.emergencyPhone ? <p>Emergencia: {professional.emergencyPhone}</p> : null}
                 {professional.email ? <p>{professional.email}</p> : null}
+                {professional.documentId ? <p>ID: {professional.documentId}</p> : null}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -567,7 +595,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
                   className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700"
                 >
                   <Trash2 className="size-4" />
-                  Eliminar
+                  Desactivar
                 </button>
               </div>
             </div>

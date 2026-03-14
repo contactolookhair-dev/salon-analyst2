@@ -81,7 +81,9 @@ export async function POST(request: Request) {
           : "system_rules",
       commissionValue: safeNumber(body.commissionValue) || undefined,
       phone: safeString(body.phone) || undefined,
+      emergencyPhone: safeString(body.emergencyPhone) || undefined,
       email: safeString(body.email) || undefined,
+      documentId: safeString(body.documentId) || undefined,
       notes: safeString(body.notes) || undefined,
       avatarColor: safeString(body.avatarColor) || undefined,
     });
@@ -134,7 +136,9 @@ export async function PATCH(request: Request) {
           : "system_rules",
       commissionValue: safeNumber(body.commissionValue) || undefined,
       phone: safeString(body.phone) || undefined,
+      emergencyPhone: safeString(body.emergencyPhone) || undefined,
       email: safeString(body.email) || undefined,
+      documentId: safeString(body.documentId) || undefined,
       notes: safeString(body.notes) || undefined,
       avatarColor: safeString(body.avatarColor) || undefined,
     });
@@ -171,9 +175,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({
       success: true,
       data: result,
-      message: result.deactivated
-        ? "El profesional tenía historial y fue desactivado en lugar de eliminarse."
-        : "Profesional eliminado correctamente.",
+      message: "El trabajador fue desactivado para conservar su historial y comisiones.",
     });
   } catch (error) {
     return NextResponse.json(

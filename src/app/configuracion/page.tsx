@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { SectionHeading } from "@/shared/components/ui/section-heading";
 import { Card } from "@/shared/components/ui/card";
 import { ProfessionalsAdmin } from "@/features/team/components/professionals-admin";
+import { NotificationSettingsCard } from "@/features/notifications/components/notification-settings-card";
+import { SystemMaintenanceCard } from "@/features/configuration/components/system-maintenance-card";
 import {
   catalogItems,
   normalizeCatalogName,
@@ -21,6 +23,7 @@ import {
 } from "@/shared/lib/branch-operations";
 import {
   loadEditableCatalog,
+  resetEditableCatalog,
   saveEditableCatalog,
 } from "@/features/configuration/lib/catalog-storage";
 import { useBusinessSnapshot } from "@/shared/hooks/use-business-snapshot";
@@ -118,6 +121,23 @@ export default function ConfiguracionPage() {
     });
   }
 
+  function updateBranchLogoFromFile(branchId: Branch["id"], file?: File | null) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      updateBranch(branchId, (currentBranch) => ({
+        ...currentBranch,
+        logoUrl: typeof reader.result === "string" ? reader.result : "",
+      }));
+    };
+
+    reader.readAsDataURL(file);
+  }
+
   return (
     <section className="space-y-6">
       <SectionHeading
@@ -127,6 +147,8 @@ export default function ConfiguracionPage() {
       />
 
       <ProfessionalsAdmin initialProfessionals={snapshot.professionals} />
+      <NotificationSettingsCard />
+      <SystemMaintenanceCard />
 
       <Card className="space-y-4">
         <div>
@@ -149,7 +171,7 @@ export default function ConfiguracionPage() {
                 key={branch.id}
                 className="rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4"
               >
-                <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr_1fr_1.2fr_1fr]">
+                <div className="grid gap-3 xl:grid-cols-[1.1fr_1.2fr_1fr_1fr_1fr_1fr]">
                   <label className="space-y-2 text-sm">
                     <span className="font-medium text-olive-950">Sucursal</span>
                     <input
@@ -160,6 +182,20 @@ export default function ConfiguracionPage() {
                           name: event.target.value as Branch["name"],
                         }))
                       }
+                      className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-olive-950">Logo URL</span>
+                    <input
+                      value={branch.logoUrl ?? ""}
+                      onChange={(event) =>
+                        updateBranch(branch.id, (currentBranch) => ({
+                          ...currentBranch,
+                          logoUrl: event.target.value,
+                        }))
+                      }
+                      placeholder="https://... o data URL"
                       className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
                     />
                   </label>
@@ -179,36 +215,56 @@ export default function ConfiguracionPage() {
                     />
                   </label>
                   <label className="space-y-2 text-sm">
-                    <span className="font-medium text-olive-950">Gastos fijos mensuales</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={branch.fixedMonthlyExpenses}
-                      onChange={(event) =>
-                        updateBranch(branch.id, (currentBranch) => ({
-                          ...currentBranch,
-                          fixedMonthlyExpenses: Number(event.target.value) || 0,
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
-                    />
+                    <span className="font-medium text-olive-950">Color principal</span>
+                    <div className="flex items-center gap-3 rounded-2xl border border-olive-950/10 bg-white px-4 py-3">
+                      <input
+                        type="color"
+                        value={branch.primaryColor}
+                        onChange={(event) =>
+                          updateBranch(branch.id, (currentBranch) => ({
+                            ...currentBranch,
+                            primaryColor: event.target.value,
+                          }))
+                        }
+                        className="size-10 shrink-0 rounded-xl border-0 bg-transparent p-0"
+                      />
+                      <input
+                        value={branch.primaryColor}
+                        onChange={(event) =>
+                          updateBranch(branch.id, (currentBranch) => ({
+                            ...currentBranch,
+                            primaryColor: event.target.value,
+                          }))
+                        }
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      />
+                    </div>
                   </label>
                   <label className="space-y-2 text-sm">
-                    <span className="font-medium text-olive-950">Prorrateo fijo</span>
-                    <select
-                      value={branch.fixedExpenseProrationMode}
-                      onChange={(event) =>
-                        updateBranch(branch.id, (currentBranch) => ({
-                          ...currentBranch,
-                          fixedExpenseProrationMode:
-                            event.target.value as Branch["fixedExpenseProrationMode"],
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
-                    >
-                      <option value="calendar_days">Días calendario</option>
-                      <option value="operating_days">Días operativos</option>
-                    </select>
+                    <span className="font-medium text-olive-950">Color secundario</span>
+                    <div className="flex items-center gap-3 rounded-2xl border border-olive-950/10 bg-white px-4 py-3">
+                      <input
+                        type="color"
+                        value={branch.secondaryColor}
+                        onChange={(event) =>
+                          updateBranch(branch.id, (currentBranch) => ({
+                            ...currentBranch,
+                            secondaryColor: event.target.value,
+                          }))
+                        }
+                        className="size-10 shrink-0 rounded-xl border-0 bg-transparent p-0"
+                      />
+                      <input
+                        value={branch.secondaryColor}
+                        onChange={(event) =>
+                          updateBranch(branch.id, (currentBranch) => ({
+                            ...currentBranch,
+                            secondaryColor: event.target.value,
+                          }))
+                        }
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      />
+                    </div>
                   </label>
                   <div className="space-y-2 text-sm">
                     <span className="font-medium text-olive-950">Estado</span>
@@ -231,6 +287,70 @@ export default function ConfiguracionPage() {
                       >
                         {branch.active ? "Desactivar" : "Activar"}
                       </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)]">
+                  <div
+                    className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-[28px] border bg-white shadow-soft"
+                    style={{
+                      borderColor: `${branch.primaryColor}33`,
+                      background: `linear-gradient(135deg, ${branch.secondaryColor} 0%, #ffffff 100%)`,
+                    }}
+                  >
+                    {branch.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={branch.logoUrl}
+                        alt={`Logo de ${branch.name}`}
+                        className="h-full w-full object-contain p-3"
+                      />
+                    ) : (
+                      <span
+                        className="px-4 text-center text-sm font-semibold uppercase tracking-[0.18em]"
+                        style={{ color: branch.primaryColor }}
+                      >
+                        {branch.name}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="rounded-[24px] border border-olive-950/8 bg-white p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-olive-950">Branding de sucursal</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Puedes subir un archivo, pegar una URL o dejar el placeholder automático con el nombre de la sucursal.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <label className="inline-flex cursor-pointer items-center rounded-full border border-olive-950/10 bg-[#f6f2ea] px-4 py-2 text-sm font-semibold text-olive-950 transition hover:border-olive-950/20">
+                          Subir logo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(event) =>
+                              updateBranchLogoFromFile(branch.id, event.target.files?.[0] ?? null)
+                            }
+                          />
+                        </label>
+                        {branch.logoUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateBranch(branch.id, (currentBranch) => ({
+                                ...currentBranch,
+                                logoUrl: "",
+                              }))
+                            }
+                            className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                          >
+                            Quitar logo
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -282,8 +402,21 @@ export default function ConfiguracionPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar por nombre o nombre normalizado"
-            className="w-full max-w-sm rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+            className="w-full max-w-sm rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
           />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              resetEditableCatalog();
+              setItems(loadEditableCatalog());
+            }}
+            className="rounded-full border border-olive-950/10 bg-white px-4 py-2 text-sm font-semibold text-olive-950"
+          >
+            Restaurar catálogo maestro inicial
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -346,7 +479,7 @@ export default function ConfiguracionPage() {
                         nombre_normalizado: normalizeCatalogName(event.target.value),
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   />
                   <p className="text-xs text-muted-foreground">
                     Normalizado: {item.nombre_normalizado}
@@ -374,7 +507,7 @@ export default function ConfiguracionPage() {
                         categoria: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   />
                 </label>
                 <label className="space-y-2 text-sm">
@@ -387,7 +520,7 @@ export default function ConfiguracionPage() {
                         tipo: event.target.value as CatalogItem["tipo"],
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   >
                     <option value="service">servicio</option>
                     <option value="product">producto</option>
@@ -405,7 +538,7 @@ export default function ConfiguracionPage() {
                         precio_venta_bruto: Number(event.target.value) || 0,
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   />
                 </label>
                 <label className="space-y-2 text-sm">
@@ -420,7 +553,7 @@ export default function ConfiguracionPage() {
                         costo: Number(event.target.value) || 0,
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   />
                 </label>
                 <label className="space-y-2 text-sm">
@@ -435,7 +568,7 @@ export default function ConfiguracionPage() {
                         commission_value: Number(event.target.value) || 0,
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   />
                 </label>
                 <label className="space-y-2 text-sm">
@@ -448,7 +581,7 @@ export default function ConfiguracionPage() {
                         commission_type: event.target.value as CatalogItem["commission_type"],
                       }))
                     }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
                   >
                     <option value="percentage">Porcentaje</option>
                     <option value="fixed">Monto fijo</option>

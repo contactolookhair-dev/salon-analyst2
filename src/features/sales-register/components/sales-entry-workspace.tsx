@@ -41,6 +41,10 @@ import { formatCurrency } from "@/shared/lib/utils";
 type SalesEntryWorkspaceProps = {
   professionals: PreferredProfessionalContext[];
   onRegistered?: () => void;
+  embeddedProfessional?: PreferredProfessionalContext | null;
+  defaultMode?: "scan" | "manual";
+  layout?: "standalone" | "embedded";
+  onClose?: () => void;
 };
 
 const emptyDraft = createEmptyManualSaleDraft();
@@ -139,11 +143,20 @@ function applyCatalogItem(
 export function SalesEntryWorkspace({
   professionals,
   onRegistered,
+  embeddedProfessional = null,
+  defaultMode = "scan",
+  layout = "standalone",
+  onClose,
 }: SalesEntryWorkspaceProps) {
-  const [mode, setMode] = useState<"scan" | "manual">("scan");
+  const [mode, setMode] = useState<"scan" | "manual">(defaultMode);
   const [file, setFile] = useState<File | null>(null);
   const [selectedProfessional, setSelectedProfessional] =
-    useState<PreferredProfessionalContext | null>(null);
+    useState<PreferredProfessionalContext | null>(embeddedProfessional);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(
+    embeddedProfessional?.branchIds.length === 1
+      ? embeddedProfessional.branchIds[0]
+      : ""
+  );
   const [availableCatalogItems, setAvailableCatalogItems] =
     useState<CatalogItem[]>(catalogItems);
   const [catalogForms, setCatalogForms] = useState<Record<string, QuickCatalogFormState>>({});
@@ -155,6 +168,7 @@ export function SalesEntryWorkspace({
     useState<"receipt" | "today">("today");
   const [detectedReceiptDate, setDetectedReceiptDate] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateSaleWarning | null>(null);
+  const [detectedProfessionalConflict, setDetectedProfessionalConflict] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [partialError, setPartialError] = useState<string | null>(null);
   const [partialPreview, setPartialPreview] = useState<string>("");
@@ -167,10 +181,42 @@ export function SalesEntryWorkspace({
     [professionals]
   );
   const today = useMemo(() => getTodayChileDateString(), []);
+  const isEmbedded = layout === "embedded";
+  const canStartStandaloneFlow = isEmbedded || Boolean(selectedProfessional);
+
+  useEffect(() => {
+    setMode(defaultMode);
+  }, [defaultMode]);
 
   useEffect(() => {
     setAvailableCatalogItems(loadEditableCatalog());
   }, []);
+
+  useEffect(() => {
+    if (!embeddedProfessional) {
+      return;
+    }
+
+    const nextBranchId =
+      embeddedProfessional.branchIds.length === 1
+        ? embeddedProfessional.branchIds[0]
+        : embeddedProfessional.branchIds.includes(selectedBranchId as typeof embeddedProfessional.branchIds[number])
+          ? selectedBranchId
+          : embeddedProfessional.branchIds[0] ?? "";
+
+    setSelectedProfessional(embeddedProfessional);
+    setSelectedBranchId(nextBranchId);
+
+    updateDraft({
+      ...draft,
+      professionalName: embeddedProfessional.name,
+      branchName:
+        nextBranchId && branches.find((branch) => branch.id === nextBranchId)?.name
+          ? (branches.find((branch) => branch.id === nextBranchId)?.name ?? draft.branchName)
+          : draft.branchName,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embeddedProfessional]);
 
   function updateDraft(nextDraft: SaleDraft) {
     const recalculated = recalculateSaleDraft(nextDraft);
@@ -183,6 +229,7 @@ export function SalesEntryWorkspace({
     setDetectedReceiptDate(null);
     setReceiptDateChoice("today");
     setDuplicateWarning(null);
+    setDetectedProfessionalConflict(null);
   }
 
   function applyDraftDate(nextDate: string) {
@@ -239,6 +286,15 @@ export function SalesEntryWorkspace({
         formData.append("preferredProfessionalName", professionalContext.name);
       }
 
+      if (selectedBranchId) {
+        const preferredBranch = branches.find((branch) => branch.id === selectedBranchId);
+
+        if (preferredBranch) {
+          formData.append("preferredBranchId", preferredBranch.id);
+          formData.append("preferredBranchName", preferredBranch.name);
+        }
+      }
+
       const response = await fetch("/api/parse-receipt", {
         method: "POST",
         body: formData,
@@ -265,6 +321,15 @@ export function SalesEntryWorkspace({
       setMode("scan");
       setWarnings(payload.warnings);
       setDuplicateWarning(null);
+      setDetectedProfessionalConflict(
+        embeddedProfessional &&
+          payload.data.context?.originalDetectedProfessionalName &&
+          payload.data.context.originalDetectedProfessionalName.trim() &&
+          payload.data.context.originalDetectedProfessionalName.trim().toLowerCase() !==
+            embeddedProfessional.name.trim().toLowerCase()
+          ? payload.data.context.originalDetectedProfessionalName.trim()
+          : null
+      );
       setDetectedReceiptDate(hasDetectedReceiptDate ? nextDate : null);
       setReceiptDateChoice(hasDetectedReceiptDate ? "receipt" : "today");
       updateDraft({
@@ -340,12 +405,27 @@ export function SalesEntryWorkspace({
 
       setWarnings([payload.message]);
       onRegistered?.();
-      updateDraft(createEmptyManualSaleDraft());
+      const resetDraft = createEmptyManualSaleDraft();
+      updateDraft(
+        embeddedProfessional
+          ? {
+              ...resetDraft,
+              professionalName: embeddedProfessional.name,
+              branchName:
+                selectedBranchId && branches.find((branch) => branch.id === selectedBranchId)?.name
+                  ? (branches.find((branch) => branch.id === selectedBranchId)?.name ?? "")
+                  : "",
+            }
+          : resetDraft
+      );
       setFile(null);
-      setSelectedProfessional(null);
+      setSelectedProfessional(embeddedProfessional);
       resetEditorState();
       setPartialError(null);
       setPartialPreview("");
+      if (isEmbedded) {
+        onClose?.();
+      }
     } catch (error) {
       setPartialError(
         error instanceof Error ? error.message : "No se pudo guardar la venta."
@@ -356,64 +436,154 @@ export function SalesEntryWorkspace({
   }
 
   return (
-    <section className="space-y-6">
-      <Card className="space-y-5">
+    <section className={isEmbedded ? "space-y-4" : "space-y-6"}>
+      <Card className={`space-y-5 ${isEmbedded ? "border border-olive-950/10 bg-[#fdfbf6]" : ""}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-olive-700">
-              Registro de ventas
+              {isEmbedded ? "Registro contextual" : "Registro de ventas"}
             </p>
             <h3 className="mt-2 text-2xl font-semibold text-olive-950">
               Escaneo con rescate asistido y carga manual
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Puedes partir desde boleta o registrar a mano. En ambos casos el
-              catálogo completa costo, comisión y cálculo financiero.
+              {embeddedProfessional
+                ? `Todo lo que registres aquí quedará asociado automáticamente a ${embeddedProfessional.name}.`
+                : "Puedes partir desde boleta o registrar a mano. En ambos casos el catálogo completa costo, comisión y cálculo financiero."}
             </p>
           </div>
 
-          <div className="inline-flex rounded-full border border-olive-950/10 bg-[#f4f1e7] p-1">
-            {(["scan", "manual"] as const).map((entryMode) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {!isEmbedded ? (
+              <label className="min-w-[280px] flex-1 space-y-2 text-sm lg:max-w-md">
+                <span className="font-medium text-olive-950">
+                  Selecciona primero al trabajador
+                </span>
+                <select
+                  value={selectedProfessional?.id ?? ""}
+                  onChange={(event) => {
+                    const nextProfessional =
+                      professionalOptions.find(
+                        (professional) => professional.id === event.target.value
+                      ) ?? null;
+
+                    const nextBranchId =
+                      nextProfessional?.branchIds.length === 1
+                        ? nextProfessional.branchIds[0]
+                        : "";
+
+                    setSelectedProfessional(nextProfessional);
+                    setSelectedBranchId(nextBranchId);
+
+                    if (nextProfessional) {
+                      const nextDraft = createEmptyManualSaleDraft();
+                      updateDraft({
+                        ...nextDraft,
+                        professionalName: nextProfessional.name,
+                        branchName:
+                          nextBranchId
+                            ? (branches.find((branch) => branch.id === nextBranchId)?.name ?? "")
+                            : "",
+                      });
+                    }
+                  }}
+                  className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                >
+                  <option value="">Seleccionar trabajador</option>
+                  {professionalOptions.map((professional) => (
+                    <option key={professional.id} value={professional.id}>
+                      {professional.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <div className="inline-flex rounded-full border border-olive-950/10 bg-[#f4f1e7] p-1">
+              {(["scan", "manual"] as const).map((entryMode) => (
+                <button
+                  key={entryMode}
+                  type="button"
+                  onClick={() => {
+                    setMode(entryMode);
+                    if (entryMode === "manual") {
+                      const nextDraft = createEmptyManualSaleDraft();
+                      updateDraft(
+                        selectedProfessional
+                          ? {
+                              ...nextDraft,
+                              professionalName: selectedProfessional.name,
+                              branchName:
+                                selectedBranchId
+                                  ? (branches.find((branch) => branch.id === selectedBranchId)?.name ?? "")
+                                  : nextDraft.branchName,
+                            }
+                          : nextDraft
+                      );
+                      setDetectedReceiptDate(null);
+                      setReceiptDateChoice("today");
+                      setDuplicateWarning(null);
+                      setIsEditorOpen(true);
+                    }
+                  }}
+                  disabled={!canStartStandaloneFlow}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    mode === entryMode
+                      ? "bg-olive-950 text-white"
+                      : "text-olive-950"
+                  } ${!canStartStandaloneFlow ? "cursor-not-allowed opacity-50" : ""}`}
+                >
+                  {entryMode === "scan" ? "Escanear boleta" : "Registro manual"}
+                </button>
+              ))}
+            </div>
+            {isEmbedded && onClose ? (
               <button
-                key={entryMode}
                 type="button"
-                onClick={() => {
-                  setMode(entryMode);
-                  if (entryMode === "manual") {
-                    const nextDraft = createEmptyManualSaleDraft();
-                    updateDraft(
-                      selectedProfessional
-                        ? {
-                            ...nextDraft,
-                            professionalName: selectedProfessional.name,
-                          }
-                        : nextDraft
-                    );
-                    setDetectedReceiptDate(null);
-                    setReceiptDateChoice("today");
-                    setDuplicateWarning(null);
-                    setIsEditorOpen(true);
-                  }
-                }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  mode === entryMode
-                    ? "bg-olive-950 text-white"
-                    : "text-olive-950"
-                }`}
+                onClick={onClose}
+                className="rounded-full border border-olive-950/10 bg-white px-4 py-2 text-sm font-semibold text-olive-950"
               >
-                {entryMode === "scan" ? "Escanear boleta" : "Registro manual"}
+                Cerrar
               </button>
-            ))}
+            ) : null}
           </div>
         </div>
 
         {mode === "scan" ? (
           <div className="space-y-4">
             <div className="rounded-[24px] border border-olive-950/8 bg-white/70 p-4 text-sm text-muted-foreground">
-              {selectedProfessional
-                ? `La próxima boleta se asociará al profesional ${selectedProfessional.name}. Si el PDF trae otro nombre, se priorizará el del bloque.`
-                : "Selecciona un profesional desde el módulo Equipo si quieres asociar la boleta a una tarjeta específica."}
+              {embeddedProfessional
+                ? `Esta boleta se asociará automáticamente a ${embeddedProfessional.name}.`
+                : selectedProfessional
+                  ? `La próxima boleta se asociará al profesional ${selectedProfessional.name}. Si el PDF trae otro nombre, se priorizará el del bloque.`
+                  : "Primero selecciona el trabajador y luego elige si quieres escanear boleta o registrar manualmente."}
             </div>
+
+            {embeddedProfessional && embeddedProfessional.branchIds.length > 1 ? (
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-olive-950">Sucursal de registro</span>
+                <select
+                  value={selectedBranchId}
+                  onChange={(event) => {
+                    const nextBranchId = event.target.value;
+                    setSelectedBranchId(nextBranchId);
+                    const nextBranchName =
+                      branches.find((branch) => branch.id === nextBranchId)?.name ?? "";
+                    updateDraft({
+                      ...draft,
+                      branchName: nextBranchName,
+                    });
+                  }}
+                  className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                >
+                  <option value="">Seleccionar sucursal</option>
+                  {embeddedProfessional.branchIds.map((branchId) => (
+                    <option key={`${embeddedProfessional.id}-${branchId}`} value={branchId}>
+                      {branches.find((branch) => branch.id === branchId)?.name ?? branchId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <label className="flex cursor-pointer items-center gap-3 rounded-[24px] border border-dashed border-olive-950/15 bg-[#fbfaf6] px-5 py-6">
@@ -432,7 +602,7 @@ export function SalesEntryWorkspace({
                   className="hidden"
                   onChange={(event) => {
                     setFile(event.target.files?.[0] ?? null);
-                    setSelectedProfessional(null);
+                    setSelectedProfessional(embeddedProfessional ?? null);
                   }}
                 />
               </label>
@@ -440,7 +610,11 @@ export function SalesEntryWorkspace({
               <button
                 type="button"
                 onClick={() => void handleScan()}
-                disabled={isParsing}
+                disabled={
+                  !canStartStandaloneFlow ||
+                  isParsing ||
+                  Boolean(embeddedProfessional && embeddedProfessional.branchIds.length > 1 && !selectedBranchId)
+                }
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-olive-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {isParsing ? (
@@ -501,6 +675,9 @@ export function SalesEntryWorkspace({
                   onClick={() => {
                     resetEditorState();
                     setPartialError(null);
+                    if (isEmbedded) {
+                      onClose?.();
+                    }
                   }}
                   className="rounded-full border border-olive-950/10 bg-white px-4 py-2 text-sm font-semibold text-olive-950"
                 >
@@ -580,6 +757,57 @@ export function SalesEntryWorkspace({
                 </div>
               ) : null}
 
+              {detectedProfessionalConflict ? (
+                <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-semibold">Posible conflicto de profesional</p>
+                  <p className="mt-2">
+                    La boleta parece mencionar a <strong>{detectedProfessionalConflict}</strong>.
+                    Puedes mantener el trabajador de esta tarjeta o usar el profesional detectado.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!embeddedProfessional) {
+                          return;
+                        }
+
+                        setSelectedProfessional(embeddedProfessional);
+                        updateDraft({
+                          ...draft,
+                          professionalName: embeddedProfessional.name,
+                        });
+                      }}
+                      className="rounded-full bg-amber-900 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Mantener trabajador de la tarjeta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const matchedProfessional =
+                          professionalOptions.find(
+                            (professional) =>
+                              professional.name.trim().toLowerCase() ===
+                              detectedProfessionalConflict.trim().toLowerCase()
+                          ) ?? null;
+
+                        setSelectedProfessional(matchedProfessional);
+                        updateDraft({
+                          ...draft,
+                          professionalName:
+                            matchedProfessional?.name ?? detectedProfessionalConflict,
+                        });
+                        setDetectedProfessionalConflict(null);
+                      }}
+                      className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900"
+                    >
+                      Usar profesional detectado
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-olive-950">Cliente</span>
@@ -599,7 +827,7 @@ export function SalesEntryWorkspace({
                     onChange={(event) =>
                       updateDraft({ ...draft, professionalName: event.target.value })
                     }
-                    disabled={Boolean(selectedProfessional)}
+                    disabled={Boolean(embeddedProfessional && selectedProfessional)}
                     className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
                   />
                   <datalist id="professional-suggestions">
@@ -610,19 +838,44 @@ export function SalesEntryWorkspace({
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-olive-950">Sucursal</span>
-                  <input
-                    list="branch-suggestions"
-                    value={draft.branchName}
-                    onChange={(event) =>
-                      updateDraft({ ...draft, branchName: event.target.value })
-                    }
-                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
-                  />
-                  <datalist id="branch-suggestions">
-                    {branchOptions.map((branchName) => (
-                      <option key={branchName} value={branchName} />
-                    ))}
-                  </datalist>
+                  {embeddedProfessional ? (
+                    <select
+                      value={selectedBranchId}
+                      onChange={(event) => {
+                        const nextBranchId = event.target.value;
+                        setSelectedBranchId(nextBranchId);
+                        updateDraft({
+                          ...draft,
+                          branchName:
+                            branches.find((branch) => branch.id === nextBranchId)?.name ?? "",
+                        });
+                      }}
+                      className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                    >
+                      <option value="">Seleccionar sucursal</option>
+                      {embeddedProfessional.branchIds.map((branchId) => (
+                        <option key={`editor-${embeddedProfessional.id}-${branchId}`} value={branchId}>
+                          {branches.find((branch) => branch.id === branchId)?.name ?? branchId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        list="branch-suggestions"
+                        value={draft.branchName}
+                        onChange={(event) =>
+                          updateDraft({ ...draft, branchName: event.target.value })
+                        }
+                        className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+                      />
+                      <datalist id="branch-suggestions">
+                        {branchOptions.map((branchName) => (
+                          <option key={branchName} value={branchName} />
+                        ))}
+                      </datalist>
+                    </>
+                  )}
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-olive-950">Fecha</span>
@@ -1142,6 +1395,9 @@ export function SalesEntryWorkspace({
                   onClick={() => {
                     resetEditorState();
                     setPartialError(null);
+                    if (isEmbedded) {
+                      onClose?.();
+                    }
                   }}
                   className="rounded-full border border-olive-950/10 bg-white px-5 py-3 text-sm font-semibold text-olive-950"
                 >
