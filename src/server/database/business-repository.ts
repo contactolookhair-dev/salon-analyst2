@@ -356,14 +356,8 @@ export async function getBusinessSnapshotFromStorage(branch: BranchFilter) {
 
   return {
     branch,
-    sales:
-      branch === "all"
-        ? mockSales
-        : mockSales.filter((sale) => sale.branchId === branch),
-    expenses:
-      branch === "all"
-        ? mockExpenses
-        : mockExpenses.filter((expense) => expense.branchId === branch),
+    sales: [],
+    expenses: [],
     professionals:
       branch === "all"
         ? mockProfessionals
