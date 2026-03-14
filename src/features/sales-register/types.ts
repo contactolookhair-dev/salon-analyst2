@@ -46,6 +46,7 @@ export type SaleLineDraft = {
   itemType: "service" | "product" | "unknown";
   quantity: number;
   unitLabel: string;
+  priceMode: "unit" | "line";
   unitPrice: number;
   grossLineTotal: number;
   netLineTotal: number;

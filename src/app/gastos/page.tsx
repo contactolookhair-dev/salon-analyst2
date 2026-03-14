@@ -532,7 +532,7 @@ export default function GastosPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           label="Gastos fijos mensuales"
           value={formatCurrency(monthlyFixedTotal)}
@@ -571,10 +571,10 @@ export default function GastosPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div className="space-y-6">
         {typeFilter !== "variable" ? (
           <Card className="space-y-5">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Gestión de gastos fijos</p>
                 <h3 className="mt-1 text-xl font-semibold text-olive-950">
@@ -594,92 +594,97 @@ export default function GastosPage() {
               {filteredFixedExpenses.map((expense) => (
                 <div
                   key={expense.id}
-                  className="grid gap-4 rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4 xl:grid-cols-[1.2fr_1fr_1fr_1fr_1fr_1fr_auto]"
+                  className="rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4"
                 >
-                  <div>
-                    <p className="font-semibold text-olive-950">{expense.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {expense.branch} · {expense.category}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {expense.paymentStatus === "paid"
-                        ? `Pagado el ${expense.paidDate ?? "-"}`
-                        : expense.paymentStatus === "partial"
-                          ? `Pago parcial · saldo ${formatCurrency(expense.balancePending ?? 0)}`
-                          : `Pendiente · saldo ${formatCurrency(expense.balancePending ?? 0)}`}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
-                      Monto mensual
-                    </p>
-                    <p className="mt-2 font-semibold text-olive-950">
-                      {formatCurrency(expense.monthlyAmount ?? expense.amount)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
-                      Prorrateo
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-olive-950">
-                      {expense.prorationMode === "operating_days"
-                        ? "Días operativos"
-                        : "Días calendario"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
-                      Cuota diaria
-                    </p>
-                    <p className="mt-2 font-semibold text-olive-950">
-                      {formatCurrency(expense.dailyAmount ?? 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
-                      Estado de pago
-                    </p>
-                    <p
-                      className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                        expense.paymentStatus === "paid"
-                          ? "bg-[#e8f0e5] text-[#46653d]"
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,2fr)]">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-olive-950">{expense.title}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {expense.branch} · {expense.category}
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {expense.paymentStatus === "paid"
+                          ? `Pagado el ${expense.paidDate ?? "-"}`
                           : expense.paymentStatus === "partial"
-                            ? "bg-[#fff1db] text-[#9a6b20]"
-                            : "bg-[#f3ede5] text-[#8a6b45]"
-                      }`}
-                    >
-                      {expense.paymentStatus === "paid"
-                        ? "Pagado"
-                        : expense.paymentStatus === "partial"
-                          ? "Parcial"
-                          : "Pendiente"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
-                      Saldo pendiente
-                    </p>
-                    <p className="mt-2 font-semibold text-olive-950">
-                      {formatCurrency(expense.balancePending ?? 0)}
-                    </p>
-                  </div>
-                  <div className="flex items-start justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openPaymentModal(expense)}
-                      className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
-                      aria-label={`Marcar como pagado ${expense.title}`}
-                    >
-                      <Wallet className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(expense)}
-                      className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
-                      aria-label={`Editar ${expense.title}`}
-                    >
-                      <Pencil className="size-4" />
-                    </button>
+                            ? `Pago parcial · saldo ${formatCurrency(expense.balancePending ?? 0)}`
+                            : `Pendiente · saldo ${formatCurrency(expense.balancePending ?? 0)}`}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto] xl:items-start">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
+                          Monto mensual
+                        </p>
+                        <p className="mt-2 font-semibold text-olive-950 break-words">
+                          {formatCurrency(expense.monthlyAmount ?? expense.amount)}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
+                          Prorrateo
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-olive-950">
+                          {expense.prorationMode === "operating_days"
+                            ? "Días operativos"
+                            : "Días calendario"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
+                          Cuota diaria
+                        </p>
+                        <p className="mt-2 font-semibold text-olive-950 break-words">
+                          {formatCurrency(expense.dailyAmount ?? 0)}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
+                          Estado de pago
+                        </p>
+                        <p
+                          className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                            expense.paymentStatus === "paid"
+                              ? "bg-[#e8f0e5] text-[#46653d]"
+                              : expense.paymentStatus === "partial"
+                                ? "bg-[#fff1db] text-[#9a6b20]"
+                                : "bg-[#f3ede5] text-[#8a6b45]"
+                          }`}
+                        >
+                          {expense.paymentStatus === "paid"
+                            ? "Pagado"
+                            : expense.paymentStatus === "partial"
+                              ? "Parcial"
+                              : "Pendiente"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.18em] text-olive-700">
+                          Saldo pendiente
+                        </p>
+                        <p className="mt-2 font-semibold text-olive-950 break-words">
+                          {formatCurrency(expense.balancePending ?? 0)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-start justify-start gap-2 xl:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openPaymentModal(expense)}
+                          className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
+                          aria-label={`Marcar como pagado ${expense.title}`}
+                        >
+                          <Wallet className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(expense)}
+                          className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
+                          aria-label={`Editar ${expense.title}`}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -700,7 +705,7 @@ export default function GastosPage() {
 
         {typeFilter !== "fixed" ? (
           <Card className="space-y-5">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Gastos variables del día</p>
                 <h3 className="mt-1 text-xl font-semibold text-olive-950">
@@ -722,15 +727,15 @@ export default function GastosPage() {
                   key={expense.id}
                   className="rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
                       <p className="font-semibold text-olive-950">{expense.title}</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {expense.branch} · {expense.category} · {expense.createdAt}
                       </p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <p className="font-semibold text-olive-950">
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <p className="mr-1 font-semibold text-olive-950">
                         {formatCurrency(expense.amount)}
                       </p>
                       <button

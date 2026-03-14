@@ -86,6 +86,31 @@ function detectQuantityFromName(name: string, fallbackQuantity: number) {
   };
 }
 
+function inferQuantityFromCatalogPrice(
+  lineTotal: number,
+  catalogItem: CatalogItem | null,
+  fallbackQuantity: number
+) {
+  if (!catalogItem || !catalogItem.precio_venta_bruto || lineTotal <= 0) {
+    return null;
+  }
+
+  const estimatedQuantity = Math.round(lineTotal / catalogItem.precio_venta_bruto);
+
+  if (estimatedQuantity <= 1) {
+    return null;
+  }
+
+  const estimatedLineTotal = estimatedQuantity * catalogItem.precio_venta_bruto;
+  const tolerance = Math.max(250, Math.round(catalogItem.precio_venta_bruto * 0.08));
+
+  if (Math.abs(estimatedLineTotal - lineTotal) > tolerance) {
+    return fallbackQuantity > 1 ? fallbackQuantity : null;
+  }
+
+  return estimatedQuantity;
+}
+
 function classifyBusinessRule(name: string, inferredType: SaleLineDraft["itemType"]) {
   const normalizedName = normalizeLooseName(name);
   const mentionsAdhesive =
@@ -117,10 +142,17 @@ function classifyBusinessRule(name: string, inferredType: SaleLineDraft["itemTyp
 function applyBusinessFallbackRules(
   baseLine: SaleLineDraft,
   detectedName: string,
-  originalQuantity: number
+  originalQuantity: number,
+  lineTotal: number,
+  catalogItem: CatalogItem | null
 ) {
   const classification = classifyBusinessRule(detectedName, baseLine.itemType);
   const quantityDetection = detectQuantityFromName(detectedName, originalQuantity);
+  const inferredCatalogQuantity = inferQuantityFromCatalogPrice(
+    lineTotal,
+    catalogItem,
+    originalQuantity
+  );
   const warnings = [...baseLine.warnings];
 
   if (quantityDetection.warning) {
@@ -132,32 +164,65 @@ function applyBusinessFallbackRules(
   let commissionType = baseLine.commissionType;
   let commissionValue = baseLine.commissionValue;
   let itemType = baseLine.itemType;
+  let priceMode = baseLine.priceMode;
+  let resolvedUnitLabel = quantityDetection.unitLabel ?? unitLabel;
+  let quantity =
+    quantityDetection.confidence === "high"
+      ? quantityDetection.quantity
+      : Math.max(inferredCatalogQuantity ?? originalQuantity ?? 1, 1);
 
   if (classification === "adhesive_sheet") {
     unitLabel = "sheet";
-    unitCost = 500;
-    itemType = "product";
+    resolvedUnitLabel = "sheet";
+    unitCost = baseLine.unitCost || 500;
+    commissionType = baseLine.commissionType === "none" ? "fixed" : baseLine.commissionType;
+    commissionValue = baseLine.commissionValue || 500;
+    itemType = catalogItem?.tipo ?? "product";
+    priceMode = "unit";
   }
 
   if (classification === "nano_sheet") {
     unitLabel = "sheet";
-    unitCost = 500;
-    itemType = "product";
+    resolvedUnitLabel = "sheet";
+    unitCost = baseLine.unitCost || 500;
+    itemType = catalogItem?.tipo ?? "product";
+    priceMode = "unit";
   }
 
   if (classification === "adhesive_maintenance_pair") {
+    const shouldConvertSheetsToPairs =
+      quantityDetection.unitLabel !== "pair" && quantity > 1;
     unitLabel = "pair";
     unitCost = unitCost || 500;
     commissionType = "percentage";
     commissionValue = 40;
     itemType = "service";
+    priceMode = "unit";
+    resolvedUnitLabel = "pair";
+    quantity = shouldConvertSheetsToPairs ? Math.max(Math.round(quantity / 2), 1) : quantity;
+  }
+
+  let unitPrice = baseLine.unitPrice;
+
+  if (classification === "adhesive_sheet" || classification === "nano_sheet") {
+    unitPrice =
+      catalogItem?.precio_venta_bruto ||
+      (quantity > 0 ? Math.round(lineTotal / quantity) : baseLine.unitPrice);
+  }
+
+  if (classification === "adhesive_maintenance_pair") {
+    unitPrice =
+      catalogItem?.precio_venta_bruto ||
+      (quantity > 0 ? Math.round(lineTotal / quantity) : baseLine.unitPrice);
   }
 
   return {
     ...baseLine,
     itemType,
-    quantity: quantityDetection.quantity,
-    unitLabel: quantityDetection.unitLabel ?? unitLabel,
+    quantity,
+    unitLabel: resolvedUnitLabel,
+    priceMode,
+    unitPrice,
     unitCost,
     commissionType,
     commissionValue,
@@ -196,6 +261,7 @@ function buildLineDraftFromCatalog(
     itemType: inferredType,
     quantity: quantityValue,
     unitLabel: catalogItem?.unit_label ?? "unit",
+    priceMode: "unit",
     unitPrice,
     grossLineTotal: lineTotal || unitPrice * quantityValue,
     netLineTotal: 0,
@@ -219,11 +285,7 @@ function buildLineDraftFromCatalog(
     matchType: catalogItem ? matchType : "unmatched",
   };
 
-  if (catalogItem && matchType !== "suggested") {
-    return baseLine;
-  }
-
-  const fallbackLine = applyBusinessFallbackRules(
+  return applyBusinessFallbackRules(
     {
       ...baseLine,
       catalogItem: matchType === "suggested" ? null : baseLine.catalogItem,
@@ -237,14 +299,19 @@ function buildLineDraftFromCatalog(
       status: matchType === "suggested" ? "requires_review" : baseLine.status,
       warnings:
         matchType === "suggested"
-          ? Array.from(new Set([...baseLine.warnings, "Coincidencia sugerida: revisar antes de confirmar."]))
+          ? Array.from(
+              new Set([
+                ...baseLine.warnings,
+                "Coincidencia sugerida: revisar antes de confirmar.",
+              ])
+            )
           : baseLine.warnings,
     },
     detectedName,
-    quantity
+    quantity,
+    lineTotal,
+    catalogItem
   );
-
-  return fallbackLine;
 }
 
 export function createSaleDraftFromExtraction(

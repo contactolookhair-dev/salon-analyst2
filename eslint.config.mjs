@@ -12,10 +12,14 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "node_modules/**", "next-env.d.ts"],
+    ignores: [
+      ".next/**",
+      ".next-corrupt-*/**",
+      "node_modules/**",
+      "next-env.d.ts",
+    ],
   },
   ...compat.extends("next/core-web-vitals"),
 ];
 
 export default eslintConfig;
-

@@ -34,6 +34,23 @@ export function countOperatingDaysInMonth(branch: Branch, date: Date) {
   return operatingDays;
 }
 
+function countRemainingOperatingDaysInMonth(branch: Branch, date: Date) {
+  const year = date.getUTCFullYear();
+  const monthIndex = date.getUTCMonth();
+  const daysInMonth = getDaysInMonth(year, monthIndex);
+  let operatingDays = 0;
+
+  for (let day = date.getUTCDate(); day <= daysInMonth; day += 1) {
+    const currentDate = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+
+    if (isBranchOpenOnDate(branch, currentDate)) {
+      operatingDays += 1;
+    }
+  }
+
+  return operatingDays;
+}
+
 export function getDailyTarget(branch: Branch, date: Date) {
   if (!isBranchOpenOnDate(branch, date)) {
     return 0;
@@ -63,7 +80,18 @@ export function getDailyFixedExpense(branch: Branch, date: Date) {
 }
 
 export function getDailyExpenseQuota(
-  expense: Pick<Expense, "amount" | "monthlyAmount" | "prorationMode" | "type" | "active">,
+  expense: Pick<
+    Expense,
+    | "amount"
+    | "monthlyAmount"
+    | "prorationMode"
+    | "type"
+    | "active"
+    | "paymentStatus"
+    | "paidAmount"
+    | "paidDate"
+    | "balancePending"
+  >,
   branch: Branch,
   date: Date
 ) {
@@ -72,12 +100,46 @@ export function getDailyExpenseQuota(
   }
 
   const monthlyAmount = expense.monthlyAmount ?? expense.amount;
+  const paidDate = expense.paidDate
+    ? new Date(`${expense.paidDate}T12:00:00.000Z`)
+    : null;
+  const paidOnOrBeforeCurrentDate =
+    paidDate !== null && paidDate.getTime() <= date.getTime();
+  const pendingAmount =
+    expense.balancePending ??
+    Math.max(monthlyAmount - (expense.paidAmount ?? 0), 0);
   const mode: ExpenseProrationMode =
     expense.prorationMode ?? branch.fixedExpenseProrationMode;
 
+  if (
+    expense.paymentStatus === "paid" &&
+    paidOnOrBeforeCurrentDate
+  ) {
+    return 0;
+  }
+
+  const baseAmount =
+    expense.paymentStatus === "partial" && paidOnOrBeforeCurrentDate
+      ? pendingAmount
+      : monthlyAmount;
+
+  if (baseAmount <= 0) {
+    return 0;
+  }
+
   if (mode === "calendar_days") {
+    const divisor =
+      expense.paymentStatus === "partial" && paidOnOrBeforeCurrentDate
+        ? Math.max(
+            getDaysInMonth(date.getUTCFullYear(), date.getUTCMonth()) -
+              date.getUTCDate() +
+              1,
+            1
+          )
+        : getDaysInMonth(date.getUTCFullYear(), date.getUTCMonth());
+
     return roundCurrency(
-      monthlyAmount / getDaysInMonth(date.getUTCFullYear(), date.getUTCMonth())
+      baseAmount / divisor
     );
   }
 
@@ -85,8 +147,12 @@ export function getDailyExpenseQuota(
     return 0;
   }
 
-  const operatingDays = countOperatingDaysInMonth(branch, date);
-  return operatingDays > 0 ? roundCurrency(monthlyAmount / operatingDays) : 0;
+  const operatingDays =
+    expense.paymentStatus === "partial" && paidOnOrBeforeCurrentDate
+      ? countRemainingOperatingDaysInMonth(branch, date)
+      : countOperatingDaysInMonth(branch, date);
+
+  return operatingDays > 0 ? roundCurrency(baseAmount / operatingDays) : 0;
 }
 
 export function getBranchStatus(branch: Branch, date: Date) {

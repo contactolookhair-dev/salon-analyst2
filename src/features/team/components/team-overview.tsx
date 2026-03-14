@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, FileUp, Package, PencilLine, Scissors, Wallet } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  FileUp,
+  Package,
+  Pencil,
+  PencilLine,
+  Save,
+  Scissors,
+  Trash2,
+  Wallet,
+  X,
+} from "lucide-react";
 
 import { BranchLogo } from "@/features/branches/components/branch-logo";
 import { branches as baseBranches } from "@/features/branches/data/mock-branches";
@@ -47,6 +59,18 @@ type TeamProfessionalEntry = {
     servicesCount: number;
     productsCount: number;
   }>;
+};
+
+type EditableSaleState = {
+  id: string;
+  professionalId: string;
+  professionalName: string;
+  branchName: string;
+  date: string;
+  clientName: string;
+  service: string;
+  grossAmount: number;
+  commissionValue: number;
 };
 
 function formatDateLabel(value: string) {
@@ -395,6 +419,9 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
   );
   const [expandedProfessionalId, setExpandedProfessionalId] = useState<string | null>(null);
   const [expandedMode, setExpandedMode] = useState<"scan" | "manual">("scan");
+  const [editingSale, setEditingSale] = useState<EditableSaleState | null>(null);
+  const [isSavingSale, setIsSavingSale] = useState(false);
+  const [saleActionError, setSaleActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const syncBranches = () => setBranchConfigs(loadEditableBranches());
@@ -568,6 +595,101 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
     reportWindow.print();
   }
 
+  function openEditSale(sale: Sale) {
+    const professionalName =
+      professionals.find((professional) => professional.id === sale.professionalId)?.name ??
+      sale.professionalId;
+
+    setSaleActionError(null);
+    setEditingSale({
+      id: sale.id,
+      professionalId: sale.professionalId,
+      professionalName,
+      branchName: sale.branch,
+      date: sale.saleDate,
+      clientName: sale.clientName,
+      service: sale.service,
+      grossAmount: sale.grossAmount,
+      commissionValue: sale.commissionValue,
+    });
+  }
+
+  async function handleDeleteSale(sale: Sale) {
+    const confirmed = window.confirm(
+      `¿Seguro que deseas eliminar la venta de ${sale.clientName} por ${formatCurrency(
+        sale.grossAmount
+      )}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsSavingSale(true);
+      setSaleActionError(null);
+      const response = await fetch(`/api/sales?id=${encodeURIComponent(sale.id)}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || "No se pudo eliminar la venta.");
+      }
+
+      onRegistered?.();
+    } catch (error) {
+      setSaleActionError(
+        error instanceof Error ? error.message : "No se pudo eliminar la venta."
+      );
+    } finally {
+      setIsSavingSale(false);
+    }
+  }
+
+  async function handleSaveSaleEdit() {
+    if (!editingSale) {
+      return;
+    }
+
+    try {
+      setIsSavingSale(true);
+      setSaleActionError(null);
+
+      const response = await fetch("/api/sales", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: editingSale.id,
+          date: editingSale.date,
+          branch: editingSale.branchName,
+          professional: editingSale.professionalName,
+          professionalId: editingSale.professionalId,
+          service: editingSale.service,
+          total: editingSale.grossAmount,
+          clientName: editingSale.clientName,
+          commission: editingSale.commissionValue,
+        }),
+      });
+      const payload = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || "No se pudo editar la venta.");
+      }
+
+      setEditingSale(null);
+      onRegistered?.();
+    } catch (error) {
+      setSaleActionError(
+        error instanceof Error ? error.message : "No se pudo editar la venta."
+      );
+    } finally {
+      setIsSavingSale(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <Card className="space-y-5">
@@ -689,7 +811,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2">
         {teamSalesByProfessional.map(
           (entry) => {
             const {
@@ -717,9 +839,9 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
             return (
               <div
                 key={key}
-                className="rounded-[30px] border border-olive-950/8 bg-[#fbfaf6] p-7 shadow-[0_18px_40px_rgba(42,45,31,0.08)]"
+                className="rounded-[28px] border border-olive-950/8 bg-[#fbfaf6] p-5 shadow-[0_14px_32px_rgba(42,45,31,0.08)]"
               >
-                <div className="flex flex-col gap-5 border-b border-olive-950/8 pb-6 xl:flex-row xl:items-start xl:justify-between">
+                <div className="flex flex-col gap-4 border-b border-olive-950/8 pb-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="flex min-w-0 flex-1 items-start gap-4">
                     <BranchLogo
                       branch={
@@ -734,19 +856,19 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                       size="md"
                       className="shrink-0"
                     />
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <p className="text-[1.35rem] font-semibold leading-tight text-olive-950 break-normal">
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      <p className="text-[1.2rem] font-semibold leading-tight text-olive-950 break-normal">
                         {professional.name}
                       </p>
-                      <p className="text-sm font-medium leading-relaxed text-muted-foreground break-normal">
+                      <p className="text-[0.95rem] font-medium leading-relaxed text-muted-foreground break-normal">
                         {professional.role}
                       </p>
-                      <div className="flex flex-wrap gap-2.5">
-                        <span className="max-w-full rounded-full bg-white/90 px-3.5 py-1.5 text-xs font-semibold leading-relaxed text-olive-700 whitespace-nowrap">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="max-w-full rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold leading-relaxed text-olive-700 whitespace-nowrap">
                           {branchName}
                         </span>
                         {professional.branchIds.length > 1 ? (
-                          <span className="max-w-full rounded-full border border-olive-950/8 bg-[#f6f2ea] px-3.5 py-1.5 text-xs font-semibold leading-relaxed text-muted-foreground whitespace-nowrap">
+                          <span className="max-w-full rounded-full border border-olive-950/8 bg-[#f6f2ea] px-3 py-1 text-[11px] font-semibold leading-relaxed text-muted-foreground whitespace-nowrap">
                             Liquidación separada por sucursal
                           </span>
                         ) : null}
@@ -754,7 +876,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     </div>
                   </div>
 
-                  <div className="flex w-full flex-wrap items-center gap-2.5 xl:w-auto xl:justify-end">
+                  <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">
                     <button
                       type="button"
                       onClick={() => {
@@ -763,7 +885,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                         );
                         setExpandedMode("scan");
                       }}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-olive-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-olive-950 px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                     >
                       <FileUp className="size-4" />
                       Subir boleta
@@ -776,7 +898,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                         );
                         setExpandedMode("manual");
                       }}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-3.5 py-2 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
                     >
                       <PencilLine className="size-4" />
                       Registro manual
@@ -784,7 +906,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     <button
                       type="button"
                       onClick={() => handleExport(entry)}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-olive-950/10 bg-white px-3.5 py-2 text-sm font-semibold text-olive-950 transition hover:bg-olive-950 hover:text-white"
                     >
                       <Download className="size-4" />
                       Exportar PDF
@@ -792,93 +914,97 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                   </div>
                 </div>
 
-                <div className="mt-7 grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-[22px] bg-white/90 p-5 lg:p-6">
+                <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                  <div className="rounded-[20px] bg-white/90 p-4 lg:p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Ventas del rango
                     </p>
-                    <p className="mt-3 text-3xl font-semibold leading-tight text-olive-950 break-words">
+                    <p className="mt-2.5 whitespace-nowrap text-[clamp(2rem,2.4vw,2.45rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(grossTotal)}
                     </p>
                   </div>
-                  <div className="rounded-[22px] bg-white/90 p-5 lg:p-6">
+                  <div className="rounded-[20px] bg-white/90 p-4 lg:p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Comisión acumulada
                     </p>
-                    <p className="mt-3 text-3xl font-semibold leading-tight text-olive-950 break-words">
+                    <p className="mt-2.5 whitespace-nowrap text-[clamp(2rem,2.4vw,2.45rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(commissionTotal)}
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-[22px] bg-white/90 p-4 lg:p-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="mt-3.5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-[18px] bg-white/90 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                       Adelantos
                     </p>
-                    <p className="mt-3 text-2xl font-semibold leading-tight text-olive-950 break-words">
+                    <p className="mt-2.5 whitespace-nowrap text-[clamp(1.55rem,1.7vw,1.8rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(advancesTotal)}
                     </p>
                   </div>
-                  <div className="rounded-[22px] bg-white/90 p-4 lg:p-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="rounded-[18px] bg-white/90 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                       Neto a pagar
                     </p>
-                    <p className="mt-3 flex min-h-12 items-start gap-2 text-2xl font-semibold leading-tight text-olive-950">
+                    <div className="mt-2.5 flex min-h-[2.25rem] items-center gap-2 overflow-hidden">
                       <Wallet className="size-4 shrink-0 text-olive-700" />
-                      <span className="break-words">{formatCurrency(netToPay)}</span>
-                    </p>
+                      <p className="truncate whitespace-nowrap text-[clamp(1.55rem,1.7vw,1.8rem)] font-semibold leading-none text-olive-950">
+                        {formatCurrency(netToPay)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-[22px] bg-white/90 p-4 lg:p-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="rounded-[18px] bg-white/90 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                       Servicios
                     </p>
-                    <p className="mt-3 flex min-h-12 items-start gap-2 text-2xl font-semibold leading-tight text-olive-950">
+                    <div className="mt-2.5 flex min-h-[2.25rem] items-center gap-2">
                       <Scissors className="size-4 shrink-0 text-olive-700" />
-                      {servicesCount}
-                    </p>
+                      <p className="whitespace-nowrap text-[clamp(1.55rem,1.7vw,1.8rem)] font-semibold leading-none text-olive-950">
+                        {servicesCount}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-[22px] bg-white/90 p-4 lg:p-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="rounded-[18px] bg-white/90 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                       Productos
                     </p>
-                    <p className="mt-3 flex min-h-12 items-start gap-2 text-2xl font-semibold leading-tight text-olive-950">
+                    <div className="mt-2.5 flex min-h-[2.25rem] items-center gap-2">
                       <Package className="size-4 shrink-0 text-olive-700" />
-                      {productsCount}
-                    </p>
+                      <p className="whitespace-nowrap text-[clamp(1.55rem,1.7vw,1.8rem)] font-semibold leading-none text-olive-950">
+                        {productsCount}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 lg:grid-cols-[1.1fr_1.4fr]">
-                  <div className="rounded-[22px] border border-olive-950/8 bg-white/75 p-4 lg:p-5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="mt-3.5 grid gap-2.5 md:grid-cols-3">
+                  <div className="rounded-[18px] border border-olive-950/8 bg-white/75 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                       Días con movimiento
                     </p>
-                    <p className="mt-3 text-xl font-semibold leading-tight text-olive-950">
+                    <p className="mt-2.5 whitespace-nowrap text-[clamp(1.35rem,1.55vw,1.55rem)] font-semibold leading-none text-olive-950">
                       {daysWithMovement}
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[22px] border border-olive-950/8 bg-white/75 p-4 lg:p-5">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                        Promedio ventas
-                      </p>
-                      <p className="mt-3 text-lg font-semibold leading-tight text-olive-950 break-words">
-                        {formatCurrency(averageSales)}
-                      </p>
-                    </div>
-                    <div className="rounded-[22px] border border-olive-950/8 bg-white/75 p-4 lg:p-5">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                        Promedio comisión
-                      </p>
-                      <p className="mt-3 text-lg font-semibold leading-tight text-olive-950 break-words">
-                        {formatCurrency(averageCommission)}
-                      </p>
-                    </div>
+                  <div className="rounded-[18px] border border-olive-950/8 bg-white/75 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      Promedio ventas
+                    </p>
+                    <p className="mt-2.5 truncate whitespace-nowrap text-[clamp(1.35rem,1.55vw,1.55rem)] font-semibold leading-none text-olive-950">
+                      {formatCurrency(averageSales)}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-olive-950/8 bg-white/75 p-3.5 lg:p-4">
+                    <p className="min-h-[2rem] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      Promedio comisión
+                    </p>
+                    <p className="mt-2.5 truncate whitespace-nowrap text-[clamp(1.35rem,1.55vw,1.55rem)] font-semibold leading-none text-olive-950">
+                      {formatCurrency(averageCommission)}
+                    </p>
                   </div>
                 </div>
 
-                <div className="mt-7">
+                <div className="mt-5">
                   <div className="flex flex-col gap-3 border-b border-olive-950/8 pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-base font-semibold text-olive-950">
@@ -894,8 +1020,8 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                   </div>
 
                   {professionalSales.length ? (
-                    <div className="mt-4 space-y-4">
-                      <div className="rounded-[22px] border border-olive-950/8 bg-white/92 p-5 lg:p-6">
+                    <div className="mt-4 space-y-3.5">
+                      <div className="rounded-[20px] border border-olive-950/8 bg-white/92 p-4 lg:p-5">
                         <p className="text-sm font-semibold text-olive-950">
                           Resumen diario dentro del rango
                         </p>
@@ -903,7 +1029,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                           {dailyHistory.map((entry) => (
                             <div
                               key={`${key}-${entry.date}`}
-                              className="grid gap-4 rounded-[20px] bg-[#f7f4ea] px-4 py-4 text-sm lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.8fr)]"
+                              className="grid gap-3 rounded-[18px] bg-[#f7f4ea] px-3.5 py-3 text-sm lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.8fr)]"
                             >
                               <div className="min-w-0">
                                 <p className="font-medium text-olive-950">
@@ -929,31 +1055,49 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                       {professionalSales.map((sale) => (
                         <div
                           key={sale.id}
-                          className="rounded-[22px] border border-olive-950/8 bg-white/92 p-5 lg:p-6"
+                          className="rounded-[20px] border border-olive-950/8 bg-white/92 p-4 lg:p-5"
                         >
-                          <div className="flex flex-col gap-3 border-b border-olive-950/8 pb-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex flex-col gap-3 border-b border-olive-950/8 pb-3 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0">
-                              <p className="text-base font-medium leading-snug text-olive-950">
+                              <p className="text-[0.95rem] font-medium leading-snug text-olive-950">
                                 {sale.service}
                               </p>
                               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                                 {sale.clientName} · {formatDateLabel(sale.saleDate)}
                               </p>
                             </div>
-                            <p className="text-sm font-medium text-olive-700">
-                              {sale.createdAt}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium text-olive-700">
+                                {sale.createdAt}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => openEditSale(sale)}
+                                className="inline-flex items-center gap-1 rounded-full border border-olive-950/10 bg-white px-3 py-1.5 text-xs font-semibold text-olive-950 transition hover:bg-[#f7f4ea]"
+                              >
+                                <Pencil className="size-3.5" />
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteSale(sale)}
+                                className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                              >
+                                <Trash2 className="size-3.5" />
+                                Eliminar
+                              </button>
+                            </div>
                           </div>
-                          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                            <div className="rounded-[18px] bg-[#f7f4ea] px-4 py-3.5 text-sm">
+                          <div className="mt-3 grid gap-2.5 lg:grid-cols-2">
+                            <div className="rounded-[16px] bg-[#f7f4ea] px-3.5 py-3 text-sm">
                               <p className="text-muted-foreground">Monto bruto</p>
-                              <p className="mt-2 text-lg font-semibold leading-tight text-olive-950">
+                              <p className="mt-1.5 text-base font-semibold leading-tight text-olive-950">
                                 {formatCurrency(sale.grossAmount)}
                               </p>
                             </div>
-                            <div className="rounded-[18px] bg-[#f7f4ea] px-4 py-3.5 text-sm">
+                            <div className="rounded-[16px] bg-[#f7f4ea] px-3.5 py-3 text-sm">
                               <p className="text-muted-foreground">Comisión</p>
-                              <p className="mt-2 text-lg font-semibold leading-tight text-olive-950">
+                              <p className="mt-1.5 text-base font-semibold leading-tight text-olive-950">
                                 {formatCurrency(sale.commissionValue)}
                               </p>
                             </div>
@@ -1027,7 +1171,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                 {salesInRange.map((sale) => (
                   <div
                     key={`sales-range-${sale.id}`}
-                    className="grid grid-cols-[0.9fr_1fr_2fr_1.1fr_1.1fr_1fr_1fr] gap-4 px-5 py-4 text-sm"
+                    className="grid grid-cols-[0.9fr_1fr_2fr_1fr_1.1fr_1fr_1fr_auto] gap-4 px-5 py-4 text-sm"
                   >
                     <p className="font-medium text-olive-950">
                       {formatDateLabel(sale.saleDate)}
@@ -1047,6 +1191,24 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     <p className="font-semibold text-olive-950">
                       {formatCurrency(sale.commissionValue)}
                     </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditSale(sale)}
+                        className="inline-flex items-center gap-1 rounded-full border border-olive-950/10 bg-white px-3 py-1.5 text-xs font-semibold text-olive-950 transition hover:bg-[#f7f4ea]"
+                      >
+                        <Pencil className="size-3.5" />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteSale(sale)}
+                        className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1104,6 +1266,24 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                       </p>
                     </div>
                   </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditSale(sale)}
+                      className="inline-flex items-center gap-1 rounded-full border border-olive-950/10 bg-white px-3 py-1.5 text-xs font-semibold text-olive-950 transition hover:bg-[#f7f4ea]"
+                    >
+                      <Pencil className="size-3.5" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSale(sale)}
+                      className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1114,6 +1294,172 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
           </div>
         )}
       </Card>
+
+      {editingSale ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 md:items-center">
+          <Card className="w-full max-w-2xl border border-olive-950/10 bg-[#fcfaf5] shadow-[0_24px_60px_rgba(25,29,20,0.25)]">
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.18em] text-olive-700">
+                    Editar venta
+                  </p>
+                  <h4 className="mt-2 text-2xl font-semibold text-olive-950">
+                    Ajusta la venta registrada
+                  </h4>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Puedes corregir fecha, cliente, detalle, monto bruto y comisión sin perder el historial.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="rounded-full border border-olive-950/10 bg-white p-2 text-olive-950"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {saleActionError ? (
+                <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {saleActionError}
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Trabajador</span>
+                  <input
+                    value={editingSale.professionalName}
+                    disabled
+                    className="w-full rounded-2xl border border-olive-950/10 bg-[#f7f4ea] px-4 py-3 text-olive-950"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Sucursal</span>
+                  <input
+                    value={editingSale.branchName}
+                    disabled
+                    className="w-full rounded-2xl border border-olive-950/10 bg-[#f7f4ea] px-4 py-3 text-olive-950"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Fecha</span>
+                  <input
+                    type="date"
+                    value={editingSale.date}
+                    onChange={(event) =>
+                      setEditingSale((current) =>
+                        current
+                          ? {
+                              ...current,
+                              date: event.target.value,
+                            }
+                          : current
+                      )
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Cliente</span>
+                  <input
+                    value={editingSale.clientName}
+                    onChange={(event) =>
+                      setEditingSale((current) =>
+                        current
+                          ? {
+                              ...current,
+                              clientName: event.target.value,
+                            }
+                          : current
+                      )
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-[1.6fr_1fr_1fr]">
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Detalle de la venta</span>
+                  <input
+                    value={editingSale.service}
+                    onChange={(event) =>
+                      setEditingSale((current) =>
+                        current
+                          ? {
+                              ...current,
+                              service: event.target.value,
+                            }
+                          : current
+                      )
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Monto bruto</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingSale.grossAmount}
+                    onChange={(event) =>
+                      setEditingSale((current) =>
+                        current
+                          ? {
+                              ...current,
+                              grossAmount: Number(event.target.value) || 0,
+                            }
+                          : current
+                      )
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-olive-950">Comisión</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingSale.commissionValue}
+                    onChange={(event) =>
+                      setEditingSale((current) =>
+                        current
+                          ? {
+                              ...current,
+                              commissionValue: Number(event.target.value) || 0,
+                            }
+                          : current
+                      )
+                    }
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="rounded-full border border-olive-950/10 bg-white px-4 py-2.5 text-sm font-semibold text-olive-950"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveSaleEdit()}
+                  disabled={isSavingSale}
+                  className="inline-flex items-center gap-2 rounded-full bg-olive-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  <Save className="size-4" />
+                  Guardar cambios
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -34,6 +34,7 @@ describe("calculate receipt financials", () => {
       inputName: "Mantención de Extension Adhesiva",
       itemType: "service",
       quantity: 2,
+      priceMode: "unit",
       unitPrice: 45000,
       commissionType: "fixed",
       commissionValue: 8000,
@@ -46,6 +47,30 @@ describe("calculate receipt financials", () => {
     expect(line.grossLineTotal).toBe(90000);
     expect(line.commissionAmount).toBe(16000);
     expect(line.totalCost).toBe(24000);
+  });
+
+  it("mantiene el total de linea para laminas cuando el precio ya es total", () => {
+    const line = recalculateSaleLine({
+      ...createEmptyManualSaleDraft().items[0],
+      matchedCatalogId: null,
+      matchedCatalogName: "Extension adhesivas #1b",
+      inputName: "Extension adhesivas #1b",
+      itemType: "product",
+      quantity: 10,
+      unitLabel: "sheet",
+      priceMode: "line",
+      unitPrice: 85000,
+      commissionType: "fixed",
+      commissionValue: 500,
+      commissionBase: "net",
+      unitCost: 1500,
+      catalogItem: null,
+      warnings: [],
+    });
+
+    expect(line.grossLineTotal).toBe(85000);
+    expect(line.totalCost).toBe(15000);
+    expect(line.commissionAmount).toBe(5000);
   });
 
   it("recalcula totales sin crash cuando faltan reglas", () => {

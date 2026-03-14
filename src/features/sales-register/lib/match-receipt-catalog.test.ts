@@ -4,6 +4,7 @@ import {
   createEmptyManualSaleDraft,
   createSaleDraftFromExtraction,
 } from "@/features/sales-register/lib/match-receipt-catalog";
+import { recalculateSaleLine } from "@/features/sales-register/lib/calculate-receipt-financials";
 
 describe("match receipt catalog", () => {
   it("autocompleta un item desde el catalogo", () => {
@@ -115,6 +116,51 @@ describe("match receipt catalog", () => {
     expect(draft.items[0].quantity).toBe(20);
   });
 
+  it("mantiene comision fija por lamina en match exacto de extensiones adhesivas", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "fresha",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "5",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 85000,
+      netTotal: 0,
+      totalPaid: 85000,
+      currency: "CLP",
+      items: [
+        {
+          id: "adh-exact",
+          name: "Extension adhesivas #1b",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 85000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    const recalculated = recalculateSaleLine(draft.items[0]);
+
+    expect(recalculated.unitLabel).toBe("sheet");
+    expect(recalculated.quantity).toBe(10);
+    expect(recalculated.priceMode).toBe("unit");
+    expect(recalculated.unitPrice).toBe(8500);
+    expect(recalculated.grossLineTotal).toBe(85000);
+    expect(recalculated.commissionType).toBe("fixed");
+    expect(recalculated.commissionValue).toBe(500);
+    expect(recalculated.commissionAmount).toBe(5000);
+  });
+
   it("aplica regla de nano keratina como lamina con costo unitario 500", () => {
     const draft = createSaleDraftFromExtraction({
       source: "fresha",
@@ -190,6 +236,53 @@ describe("match receipt catalog", () => {
     expect(draft.items[0].commissionType).toBe("percentage");
     expect(draft.items[0].commissionValue).toBe(40);
     expect(draft.items[0].quantity).toBe(2);
+  });
+
+  it("convierte mantencion adhesiva exacta a pares cuando el total indica laminas", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "fresha",
+      extractedBy: "text",
+      clientName: "Cliente",
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "6",
+      date: "2026-03-14",
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 80000,
+      netTotal: 0,
+      totalPaid: 80000,
+      currency: "CLP",
+      items: [
+        {
+          id: "maint-exact",
+          name: "MANTENCIÓN DE EXTENSION ADHESIVA",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 80000,
+          warnings: [],
+          confidence: 0.8,
+        },
+      ],
+      warnings: [],
+      confidence: 0.8,
+      rawText: "",
+    });
+
+    const recalculated = recalculateSaleLine(draft.items[0]);
+
+    expect(recalculated.unitLabel).toBe("pair");
+    expect(recalculated.quantity).toBe(10);
+    expect(recalculated.priceMode).toBe("unit");
+    expect(recalculated.unitPrice).toBe(4000);
+    expect(recalculated.grossLineTotal).toBe(40000);
+    expect(recalculated.commissionType).toBe("percentage");
+    expect(recalculated.commissionValue).toBe(40);
+    expect(recalculated.commissionAmount).toBe(13445);
+    expect(recalculated.totalCost).toBe(5000);
+    expect(recalculated.profit).toBe(15168);
   });
 
   it("no aplica 40 por ciento automatico a otras mantenciones", () => {

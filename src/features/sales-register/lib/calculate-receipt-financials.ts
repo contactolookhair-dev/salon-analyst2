@@ -19,7 +19,10 @@ function calculateCommission(line: SaleLineDraft) {
 }
 
 export function recalculateSaleLine(line: SaleLineDraft): SaleLineDraft {
-  const grossLineTotal = roundCurrency(line.unitPrice * Math.max(line.quantity, 1));
+  const grossLineTotal =
+    line.priceMode === "line"
+      ? roundCurrency(line.unitPrice)
+      : roundCurrency(line.unitPrice * Math.max(line.quantity, 1));
   const netLineTotal = calcularNeto(grossLineTotal);
   const vatAmount = calcularIVA(grossLineTotal);
   const totalCost = roundCurrency(line.unitCost * Math.max(line.quantity, 1));

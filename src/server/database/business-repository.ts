@@ -387,6 +387,10 @@ type CreateSaleInput = {
   confirmDuplicate?: boolean;
 };
 
+type UpdateSaleInput = CreateSaleInput & {
+  id: string;
+};
+
 type DuplicateDetectionResult = {
   severity: "high" | "medium";
   allowOverride: boolean;
@@ -623,6 +627,159 @@ export async function createSaleInStorage(input: CreateSaleInput) {
     sale: mapSale(sale),
     usedFallbackDate: parsedDate.usedFallback,
     normalizedDate: parsedDate.isoDate,
+  };
+}
+
+export async function updateSaleInStorage(input: UpdateSaleInput) {
+  const db = getDbClient();
+
+  if (!db) {
+    throw new Error("No hay base de datos disponible para editar la venta.");
+  }
+
+  const existingSale = await db.sale.findUnique({
+    where: { id: input.id },
+    include: {
+      branch: true,
+      professional: true,
+      service: true,
+    },
+  });
+
+  if (!existingSale) {
+    throw new Error("No encontré la venta que intentas editar.");
+  }
+
+  const branch = resolveBranchByName(input.branch || existingSale.branch.name);
+
+  if (!branch) {
+    throw new Error("No encontré la sucursal para actualizar la venta.");
+  }
+
+  const professionalName = input.professional || existingSale.professional.name;
+  const existingProfessional =
+    input.professionalId?.trim()
+      ? await db.professional.findUnique({
+          where: { id: input.professionalId.trim() },
+        })
+      : await db.professional.findUnique({
+          where: { id: existingSale.professionalId },
+        });
+  const professionalId = existingProfessional?.id ?? normalizeNameId(professionalName);
+  const professionalBranchIds = existingProfessional
+    ? parseBranchIds(existingProfessional.branchIdsJson, existingProfessional.primaryBranchId)
+    : [branch.id];
+  const serviceName = input.service || existingSale.service.name;
+  const serviceId = normalizeNameId(serviceName);
+  const parsedDate = parseSafeSaleDate(input.date || formatDate(existingSale.date));
+  const total = input.total > 0 ? input.total : existingSale.total;
+  const commission = input.commission ?? existingSale.commission;
+  const existingCost = Math.max(
+    calcularNeto(existingSale.total) - existingSale.commission - existingSale.profit,
+    0
+  );
+  const nextNetAmount = calcularNeto(total);
+  const profit = input.profit ?? Math.max(nextNetAmount - existingCost - commission, 0);
+
+  await db.branch.upsert({
+    where: { id: branch.id },
+    create: {
+      id: branch.id,
+      name: branch.name,
+    },
+    update: {
+      name: branch.name,
+    },
+  });
+
+  await db.professional.upsert({
+    where: { id: professionalId },
+    create: {
+      id: professionalId,
+      name: professionalName,
+      role: existingProfessional?.role ?? existingSale.professional.role ?? "Profesional",
+      primaryBranchId: existingProfessional?.primaryBranchId ?? branch.id,
+      branchIdsJson: serializeBranchIds(
+        professionalBranchIds.includes(branch.id)
+          ? professionalBranchIds
+          : [...professionalBranchIds, branch.id]
+      ),
+      active: existingProfessional?.active ?? existingSale.professional.active,
+      commissionMode:
+        existingProfessional?.commissionMode ?? existingSale.professional.commissionMode,
+      commissionValue:
+        existingProfessional?.commissionValue ?? existingSale.professional.commissionValue,
+      phone: existingProfessional?.phone ?? existingSale.professional.phone,
+      emergencyPhone:
+        existingProfessional?.emergencyPhone ?? existingSale.professional.emergencyPhone,
+      email: existingProfessional?.email ?? existingSale.professional.email,
+      documentId: existingProfessional?.documentId ?? existingSale.professional.documentId,
+      notes: existingProfessional?.notes ?? existingSale.professional.notes,
+      avatarColor: existingProfessional?.avatarColor ?? existingSale.professional.avatarColor,
+    },
+    update: {
+      name: professionalName,
+      primaryBranchId: existingProfessional?.primaryBranchId ?? branch.id,
+      branchIdsJson: serializeBranchIds(
+        professionalBranchIds.includes(branch.id)
+          ? professionalBranchIds
+          : [...professionalBranchIds, branch.id]
+      ),
+    },
+  });
+
+  await db.service.upsert({
+    where: { id: serviceId },
+    create: {
+      id: serviceId,
+      name: serviceName,
+      price: total,
+    },
+    update: {
+      name: serviceName,
+      price: total,
+    },
+  });
+
+  const sale = await db.sale.update({
+    where: { id: input.id },
+    data: {
+      date: parsedDate.value,
+      branchId: branch.id,
+      professionalId,
+      serviceId,
+      clientName: input.clientName ?? existingSale.clientName ?? "Cliente boleta",
+      total,
+      commission,
+      profit,
+      commissionType: "FIXED",
+    },
+    include: {
+      branch: true,
+      professional: true,
+      service: true,
+    },
+  });
+
+  return {
+    stored: true,
+    sale: mapSale(sale),
+  };
+}
+
+export async function deleteSaleInStorage(input: { id: string }) {
+  const db = getDbClient();
+
+  if (!db) {
+    throw new Error("No hay base de datos disponible para eliminar la venta.");
+  }
+
+  await db.sale.delete({
+    where: { id: input.id },
+  });
+
+  return {
+    deleted: true,
   };
 }
 

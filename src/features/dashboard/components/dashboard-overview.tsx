@@ -158,7 +158,7 @@ export function DashboardOverview() {
         <QuickAccessCard />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           label="Ventas del día"
           value={formatCurrency(totalGrossSalesToday)}

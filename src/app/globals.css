@@ -57,28 +57,28 @@
 }
 
 :root[data-branch-theme="look-hair-extensions"] {
-  --theme-bg: #0e0e0e;
-  --theme-bg-gradient-start: #1a1a1a;
-  --theme-bg-gradient-end: #0d0d0d;
+  --theme-bg: #f6f2ea;
+  --theme-bg-gradient-start: #faf6ef;
+  --theme-bg-gradient-end: #efe7da;
   --theme-spot: rgba(198, 169, 106, 0.16);
-  --theme-surface: rgba(24, 24, 24, 0.78);
-  --theme-card: rgba(26, 26, 26, 0.92);
-  --theme-card-strong: #1a1a1a;
-  --theme-border: rgba(198, 169, 106, 0.16);
-  --theme-text: #ffffff;
-  --theme-text-muted: #eaeaea;
-  --theme-text-description: #d6d6d6;
-  --theme-text-auxiliary: #bdbdbd;
+  --theme-surface: rgba(255, 255, 255, 0.42);
+  --theme-card: rgba(255, 255, 255, 0.88);
+  --theme-card-strong: #ffffff;
+  --theme-border: rgba(123, 98, 47, 0.14);
+  --theme-text: #2a2a2a;
+  --theme-text-muted: #72695a;
+  --theme-text-description: #72695a;
+  --theme-text-auxiliary: #8a806d;
   --theme-accent: #c6a96a;
-  --theme-accent-foreground: #0e0e0e;
+  --theme-accent-foreground: #2a2a2a;
   --theme-sidebar-bg: #111111;
   --theme-sidebar-text: #ffffff;
   --theme-sidebar-muted: rgba(255, 255, 255, 0.62);
   --theme-sidebar-active-bg: #c6a96a;
   --theme-sidebar-active-text: #111111;
   --theme-header-eyebrow: #d3ba82;
-  --theme-shell-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-  --theme-card-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  --theme-shell-shadow: 0 20px 60px rgba(135, 113, 63, 0.16);
+  --theme-card-shadow: 0 18px 40px rgba(175, 144, 75, 0.12);
 }
 
 * {
@@ -109,79 +109,4 @@ a {
 
 body[data-branch-theme="look-hair-extensions"] {
   color: var(--theme-text);
-}
-
-body[data-branch-theme="look-hair-extensions"] .text-olive-950,
-body[data-branch-theme="look-hair-extensions"] .text-olive-900,
-body[data-branch-theme="look-hair-extensions"] .text-foreground {
-  color: #ffffff !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] .text-muted-foreground,
-body[data-branch-theme="look-hair-extensions"] .text-olive-800 {
-  color: var(--theme-text-muted) !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] .text-olive-700,
-body[data-branch-theme="look-hair-extensions"] .text-olive-600 {
-  color: #d6d6d6 !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] label,
-body[data-branch-theme="look-hair-extensions"] .font-medium.text-olive-950,
-body[data-branch-theme="look-hair-extensions"] .font-semibold.text-olive-950,
-body[data-branch-theme="look-hair-extensions"] .font-semibold.text-olive-900 {
-  color: #ffffff;
-}
-
-body[data-branch-theme="look-hair-extensions"] input,
-body[data-branch-theme="look-hair-extensions"] select,
-body[data-branch-theme="look-hair-extensions"] textarea {
-  color: #ffffff;
-}
-
-body[data-branch-theme="look-hair-extensions"] input::placeholder,
-body[data-branch-theme="look-hair-extensions"] textarea::placeholder {
-  color: var(--theme-text-auxiliary);
-}
-
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-950,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-900,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .font-medium.text-olive-950,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .font-semibold.text-olive-950,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] .text-olive-950,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] .text-olive-950,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#f7f4ea]"] .text-olive-950 {
-  color: #202020 !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-muted-foreground,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-700,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] .text-olive-600,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] .text-muted-foreground,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] .text-muted-foreground,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#f7f4ea]"] .text-muted-foreground {
-  color: #5f5f5f !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] label,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] input,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] select,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] textarea,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] label,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] label {
-  color: #202020 !important;
-}
-
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] input,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] select,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-white"] textarea,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] input,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] select,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fbfaf6]"] textarea,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] input,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] select,
-body[data-branch-theme="look-hair-extensions"] [class*="bg-[#fcfaf5]"] textarea {
-  color: #202020 !important;
-  -webkit-text-fill-color: #202020 !important;
 }

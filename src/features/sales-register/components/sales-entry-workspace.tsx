@@ -122,6 +122,7 @@ function applyCatalogItem(
     itemType: catalogItem.tipo,
     quantity: line.quantity || catalogItem.default_quantity || 1,
     unitLabel: catalogItem.unit_label ?? "unit",
+    priceMode: "unit",
     unitPrice: line.unitPrice || catalogItem.precio_venta_bruto || 0,
     commissionType: catalogItem.commission_type,
     commissionValue: catalogItem.commission_value,
@@ -152,6 +153,7 @@ export function SalesEntryWorkspace({
   const [file, setFile] = useState<File | null>(null);
   const [selectedProfessional, setSelectedProfessional] =
     useState<PreferredProfessionalContext | null>(embeddedProfessional);
+  const [professionalQuery, setProfessionalQuery] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<string>(
     embeddedProfessional?.branchIds.length === 1
       ? embeddedProfessional.branchIds[0]
@@ -180,6 +182,27 @@ export function SalesEntryWorkspace({
     () => professionals.filter((professional) => professional.active),
     [professionals]
   );
+  const filteredProfessionalOptions = useMemo(() => {
+    const query = professionalQuery.trim().toLowerCase();
+
+    if (!query) {
+      return professionalOptions;
+    }
+
+    return professionalOptions.filter((professional) => {
+      const haystack = [
+        professional.name,
+        professional.role,
+        ...professional.branchIds.map(
+          (branchId) => branches.find((branch) => branch.id === branchId)?.name ?? branchId
+        ),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [professionalOptions, professionalQuery]);
   const today = useMemo(() => getTodayChileDateString(), []);
   const isEmbedded = layout === "embedded";
   const canStartStandaloneFlow = isEmbedded || Boolean(selectedProfessional);
@@ -222,6 +245,30 @@ export function SalesEntryWorkspace({
     const recalculated = recalculateSaleDraft(nextDraft);
     setDraft(recalculated.draft);
     setTotals(recalculated.totals);
+  }
+
+  function selectProfessional(nextProfessional: PreferredProfessionalContext | null) {
+    const nextBranchId =
+      nextProfessional?.branchIds.length === 1
+        ? nextProfessional.branchIds[0]
+        : "";
+
+    setSelectedProfessional(nextProfessional);
+    setSelectedBranchId(nextBranchId);
+
+    if (nextProfessional) {
+      const nextDraft = createEmptyManualSaleDraft();
+      updateDraft({
+        ...nextDraft,
+        professionalName: nextProfessional.name,
+        branchName: nextBranchId
+          ? (branches.find((branch) => branch.id === nextBranchId)?.name ?? "")
+          : "",
+      });
+      return;
+    }
+
+    updateDraft(createEmptyManualSaleDraft());
   }
 
   function resetEditorState() {
@@ -406,20 +453,28 @@ export function SalesEntryWorkspace({
       setWarnings([payload.message]);
       onRegistered?.();
       const resetDraft = createEmptyManualSaleDraft();
+      const preservedProfessional = embeddedProfessional ?? selectedProfessional;
+      const preservedBranchId =
+        selectedBranchId ||
+        (preservedProfessional?.branchIds.length === 1
+          ? preservedProfessional.branchIds[0]
+          : "");
       updateDraft(
-        embeddedProfessional
+        preservedProfessional
           ? {
               ...resetDraft,
-              professionalName: embeddedProfessional.name,
+              professionalName: preservedProfessional.name,
               branchName:
-                selectedBranchId && branches.find((branch) => branch.id === selectedBranchId)?.name
-                  ? (branches.find((branch) => branch.id === selectedBranchId)?.name ?? "")
+                preservedBranchId &&
+                branches.find((branch) => branch.id === preservedBranchId)?.name
+                  ? (branches.find((branch) => branch.id === preservedBranchId)?.name ?? "")
                   : "",
             }
           : resetDraft
       );
       setFile(null);
-      setSelectedProfessional(embeddedProfessional);
+      setSelectedProfessional(preservedProfessional ?? null);
+      setSelectedBranchId(preservedBranchId);
       resetEditorState();
       setPartialError(null);
       setPartialPreview("");
@@ -455,48 +510,71 @@ export function SalesEntryWorkspace({
 
           <div className="flex flex-wrap items-center gap-2">
             {!isEmbedded ? (
-              <label className="min-w-[280px] flex-1 space-y-2 text-sm lg:max-w-md">
-                <span className="font-medium text-olive-950">
-                  Selecciona primero al trabajador
-                </span>
-                <select
-                  value={selectedProfessional?.id ?? ""}
-                  onChange={(event) => {
-                    const nextProfessional =
-                      professionalOptions.find(
-                        (professional) => professional.id === event.target.value
-                      ) ?? null;
+              <div className="min-w-[320px] flex-1 space-y-3 lg:max-w-2xl">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-olive-950">
+                    Selecciona primero al trabajador
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    El registro se asociará al trabajador que elijas aquí.
+                  </p>
+                </div>
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-olive-700" />
+                  <input
+                    value={professionalQuery}
+                    onChange={(event) => setProfessionalQuery(event.target.value)}
+                    placeholder="Buscar trabajador por nombre, cargo o sucursal"
+                    className="w-full rounded-2xl border border-olive-950/10 bg-white px-11 py-3 text-sm text-olive-950 outline-none transition focus:border-olive-950/30"
+                  />
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {filteredProfessionalOptions.map((professional) => {
+                    const isSelected = selectedProfessional?.id === professional.id;
 
-                    const nextBranchId =
-                      nextProfessional?.branchIds.length === 1
-                        ? nextProfessional.branchIds[0]
-                        : "";
-
-                    setSelectedProfessional(nextProfessional);
-                    setSelectedBranchId(nextBranchId);
-
-                    if (nextProfessional) {
-                      const nextDraft = createEmptyManualSaleDraft();
-                      updateDraft({
-                        ...nextDraft,
-                        professionalName: nextProfessional.name,
-                        branchName:
-                          nextBranchId
-                            ? (branches.find((branch) => branch.id === nextBranchId)?.name ?? "")
-                            : "",
-                      });
-                    }
-                  }}
-                  className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
-                >
-                  <option value="">Seleccionar trabajador</option>
-                  {professionalOptions.map((professional) => (
-                    <option key={professional.id} value={professional.id}>
-                      {professional.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                    return (
+                      <button
+                        key={professional.id}
+                        type="button"
+                        onClick={() => selectProfessional(professional)}
+                        className={`rounded-[20px] border px-4 py-3 text-left transition ${
+                          isSelected
+                            ? "border-olive-950 bg-olive-950 text-white shadow-[0_14px_24px_rgba(24,30,20,0.16)]"
+                            : "border-olive-950/10 bg-white text-olive-950 hover:border-olive-950/25 hover:bg-[#f7f4ea]"
+                        }`}
+                      >
+                        <p className="text-sm font-semibold leading-tight">
+                          {professional.name}
+                        </p>
+                        <p
+                          className={`mt-1 text-xs leading-relaxed ${
+                            isSelected ? "text-white/75" : "text-muted-foreground"
+                          }`}
+                        >
+                          {professional.role}
+                        </p>
+                        <p
+                          className={`mt-2 text-[11px] uppercase tracking-[0.14em] ${
+                            isSelected ? "text-white/65" : "text-olive-700"
+                          }`}
+                        >
+                          {professional.branchIds
+                            .map(
+                              (branchId) =>
+                                branches.find((branch) => branch.id === branchId)?.name ?? branchId
+                            )
+                            .join(" · ")}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!filteredProfessionalOptions.length ? (
+                  <div className="rounded-2xl border border-dashed border-olive-950/10 bg-white/70 px-4 py-3 text-sm text-muted-foreground">
+                    No encontré trabajadores con ese criterio.
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             <div className="inline-flex rounded-full border border-olive-950/10 bg-[#f4f1e7] p-1">
               {(["scan", "manual"] as const).map((entryMode) => (
@@ -602,7 +680,6 @@ export function SalesEntryWorkspace({
                   className="hidden"
                   onChange={(event) => {
                     setFile(event.target.files?.[0] ?? null);
-                    setSelectedProfessional(embeddedProfessional ?? null);
                   }}
                 />
               </label>
@@ -1020,6 +1097,7 @@ export function SalesEntryWorkspace({
                             }
                             className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
                           />
+                          <p className="text-xs text-muted-foreground">Precio unitario</p>
                         </label>
 
                         <label className="space-y-2 text-sm">
@@ -1038,6 +1116,7 @@ export function SalesEntryWorkspace({
                             }
                             className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
                           />
+                          <p className="text-xs text-muted-foreground">Costo unitario</p>
                         </label>
 
                         <div className="flex items-end">
@@ -1058,31 +1137,31 @@ export function SalesEntryWorkspace({
 
                       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                          <p className="text-muted-foreground">Bruto</p>
+                          <p className="text-muted-foreground">Bruto total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.grossLineTotal)}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                          <p className="text-muted-foreground">Neto</p>
+                          <p className="text-muted-foreground">Neto total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.netLineTotal)}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                          <p className="text-muted-foreground">IVA</p>
+                          <p className="text-muted-foreground">IVA total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.vatAmount)}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                          <p className="text-muted-foreground">Comisión</p>
+                          <p className="text-muted-foreground">Comisión total línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.commissionAmount)}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-white/90 p-3 text-sm">
-                          <p className="text-muted-foreground">Utilidad</p>
+                          <p className="text-muted-foreground">Utilidad línea</p>
                           <p className="mt-1 font-semibold text-olive-950">
                             {formatCurrency(line.profit)}
                           </p>
@@ -1337,6 +1416,7 @@ export function SalesEntryWorkspace({
                         itemType: "unknown",
                         quantity: 1,
                         unitLabel: "unit",
+                        priceMode: "unit",
                         unitPrice: 0,
                         grossLineTotal: 0,
                         netLineTotal: 0,
