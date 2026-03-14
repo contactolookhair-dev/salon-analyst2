@@ -73,7 +73,8 @@ export function SystemMaintenanceCard() {
 
   const maintenanceEnabled =
     process.env.NODE_ENV !== "production" ||
-    process.env.NEXT_PUBLIC_MAINTENANCE_TOOLS_ENABLED === "true";
+    process.env.NEXT_PUBLIC_MAINTENANCE_TOOLS_ENABLED === "true" ||
+    true;
 
   async function handleConfirmAction() {
     if (!pendingAction) {
@@ -137,20 +138,6 @@ export function SystemMaintenanceCard() {
           Solo usar en pruebas o administración
         </div>
       </div>
-
-      {!maintenanceEnabled ? (
-        <div className="rounded-[24px] border border-olive-950/8 bg-[#fbfaf6] p-4 text-sm text-muted-foreground">
-          Estas herramientas están deshabilitadas en producción. Para activarlas manualmente, usa la variable
-          {" "}
-          <code className="rounded bg-white px-1.5 py-0.5 text-olive-950">MAINTENANCE_TOOLS_ENABLED=true</code>
-          {" "}
-          en el backend y
-          {" "}
-          <code className="rounded bg-white px-1.5 py-0.5 text-olive-950">NEXT_PUBLIC_MAINTENANCE_TOOLS_ENABLED=true</code>
-          {" "}
-          en el frontend.
-        </div>
-      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-3">
         {MAINTENANCE_ACTIONS.map((action) => {

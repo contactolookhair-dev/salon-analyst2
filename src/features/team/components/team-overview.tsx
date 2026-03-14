@@ -525,6 +525,32 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       .filter((entry) => entry.professional.active || entry.sales.length > 0);
   }, [branchConfigs, professionals, sales, selectedBranch, teamDateRange]);
 
+  const salesInRange = useMemo(() => {
+    return sales
+      .filter((sale) => isSaleInRange(sale.saleDate, teamDateRange))
+      .sort((left, right) =>
+        `${right.saleDate}T${right.createdAt}`.localeCompare(
+          `${left.saleDate}T${left.createdAt}`
+        )
+      );
+  }, [sales, teamDateRange]);
+
+  function getSaleDetailLabel(sale: Sale) {
+    if (sale.productName && sale.productName !== sale.service) {
+      return `${sale.service} + ${sale.productName}`;
+    }
+
+    return sale.productName || sale.service;
+  }
+
+  function getSaleTypeLabel(sale: Sale) {
+    if (sale.productName && sale.productName !== sale.service) {
+      return "Servicio + producto";
+    }
+
+    return sale.productName ? "Producto" : "Servicio";
+  }
+
   function handleExport(entry: TeamProfessionalEntry) {
     const reportWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=1080");
 
@@ -963,6 +989,131 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
           }
         )}
       </div>
+
+      <Card className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.18em] text-olive-700">
+              Ventas del período
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-olive-950">
+              Listado general de ventas realizadas
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Este listado respeta el mismo rango de fechas activo del bloque “Control del equipo por rango de fechas”.
+            </p>
+          </div>
+          <div className="rounded-[20px] bg-[#fbfaf6] px-4 py-3 text-sm">
+            <p className="text-muted-foreground">Rango aplicado</p>
+            <p className="mt-2 font-semibold text-olive-950">
+              {formatDateLabel(teamDateRange.from)} - {formatDateLabel(teamDateRange.to)}
+            </p>
+          </div>
+        </div>
+
+        {salesInRange.length ? (
+          <>
+            <div className="hidden overflow-hidden rounded-[24px] border border-olive-950/8 xl:block">
+              <div className="grid grid-cols-[0.9fr_1fr_2fr_1.1fr_1.1fr_1fr_1fr] gap-4 bg-[#f6f2ea] px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <p>Fecha</p>
+                <p>Profesional</p>
+                <p>Detalle de la venta</p>
+                <p>Venta</p>
+                <p>Nombre del cliente</p>
+                <p>Monto bruto</p>
+                <p>Comisión</p>
+              </div>
+              <div className="divide-y divide-olive-950/8 bg-white">
+                {salesInRange.map((sale) => (
+                  <div
+                    key={`sales-range-${sale.id}`}
+                    className="grid grid-cols-[0.9fr_1fr_2fr_1.1fr_1.1fr_1fr_1fr] gap-4 px-5 py-4 text-sm"
+                  >
+                    <p className="font-medium text-olive-950">
+                      {formatDateLabel(sale.saleDate)}
+                    </p>
+                    <p className="text-olive-950">
+                      {professionals.find((professional) => professional.id === sale.professionalId)?.name ??
+                        sale.professionalId}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {getSaleDetailLabel(sale)}
+                    </p>
+                    <p className="text-muted-foreground">{getSaleTypeLabel(sale)}</p>
+                    <p className="text-muted-foreground">{sale.clientName}</p>
+                    <p className="font-semibold text-olive-950">
+                      {formatCurrency(sale.grossAmount)}
+                    </p>
+                    <p className="font-semibold text-olive-950">
+                      {formatCurrency(sale.commissionValue)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 xl:hidden">
+              {salesInRange.map((sale) => (
+                <div
+                  key={`sales-range-mobile-${sale.id}`}
+                  className="rounded-[22px] border border-olive-950/8 bg-white/92 p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-olive-950">
+                        {formatDateLabel(sale.saleDate)}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {professionals.find((professional) => professional.id === sale.professionalId)?.name ??
+                          sale.professionalId}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-[#f6f2ea] px-3 py-1 text-xs font-semibold text-olive-700">
+                      {getSaleTypeLabel(sale)}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Detalle de la venta
+                      </p>
+                      <p className="mt-2 text-sm text-olive-950">
+                        {getSaleDetailLabel(sale)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Cliente
+                      </p>
+                      <p className="mt-2 text-sm text-olive-950">{sale.clientName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Monto bruto
+                      </p>
+                      <p className="mt-2 text-base font-semibold text-olive-950">
+                        {formatCurrency(sale.grossAmount)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Comisión
+                      </p>
+                      <p className="mt-2 text-base font-semibold text-olive-950">
+                        {formatCurrency(sale.commissionValue)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-[22px] border border-dashed border-olive-950/12 bg-white/75 px-5 py-6 text-sm leading-relaxed text-muted-foreground">
+            No hay ventas registradas dentro del rango seleccionado.
+          </div>
+        )}
+      </Card>
     </section>
   );
 }
