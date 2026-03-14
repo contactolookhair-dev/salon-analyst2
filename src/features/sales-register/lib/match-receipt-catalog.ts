@@ -111,8 +111,35 @@ function inferQuantityFromCatalogPrice(
   return estimatedQuantity;
 }
 
-function classifyBusinessRule(name: string, inferredType: SaleLineDraft["itemType"]) {
+function isProtectedAccessoryProduct(
+  normalizedName: string,
+  catalogItem: CatalogItem | null,
+  inferredType: SaleLineDraft["itemType"]
+) {
+  const accessoryLikeName =
+    /(removedor|hairtech|ultra hold|cinta adhesiva|cintas adhesivas|liquido para cinta|removedor liquido)/.test(
+      normalizedName
+    );
+
+  return (
+    inferredType === "product" &&
+    (catalogItem?.categoria === "Accesorios" ||
+      accessoryLikeName ||
+      (catalogItem?.commission_type === "none" && accessoryLikeName))
+  );
+}
+
+function classifyBusinessRule(
+  name: string,
+  inferredType: SaleLineDraft["itemType"],
+  catalogItem: CatalogItem | null
+) {
   const normalizedName = normalizeLooseName(name);
+
+  if (isProtectedAccessoryProduct(normalizedName, catalogItem, inferredType)) {
+    return "generic_product" satisfies BusinessRuleClassification;
+  }
+
   const mentionsAdhesive =
     /(adhesiva|adhesivas|extension adhesiva|extensiones adhesivas|invisible premium|adhesiva invisible|tape|cinta adhesiva|cintas adhesivas)/.test(
       normalizedName
@@ -146,7 +173,7 @@ function applyBusinessFallbackRules(
   lineTotal: number,
   catalogItem: CatalogItem | null
 ) {
-  const classification = classifyBusinessRule(detectedName, baseLine.itemType);
+  const classification = classifyBusinessRule(detectedName, baseLine.itemType, catalogItem);
   const quantityDetection = detectQuantityFromName(detectedName, originalQuantity);
   const inferredCatalogQuantity = inferQuantityFromCatalogPrice(
     lineTotal,

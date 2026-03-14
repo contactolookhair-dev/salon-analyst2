@@ -369,4 +369,55 @@ describe("match receipt catalog", () => {
     expect(draft.items[0].commissionValue).not.toBe(40);
     expect(draft.items[0].unitLabel).toBe("sheet");
   });
+
+  it("respeta removedor adhesivo como producto exacto sin comision y sin unidad lamina", () => {
+    const draft = createSaleDraftFromExtraction({
+      source: "fresha",
+      extractedBy: "text",
+      clientName: "Cliente",
+      clientEmail: null,
+      clientPhone: null,
+      professionalName: "Ivanova",
+      branchName: "House Of Hair",
+      receiptNumber: "7",
+      date: "2026-03-14",
+      time: null,
+      issuerName: null,
+      paymentMethod: "Credito",
+      subtotal: 0,
+      tax: 0,
+      grossTotal: 18000,
+      netTotal: 0,
+      totalPaid: 18000,
+      balance: null,
+      currency: "CLP",
+      origin: "pdf",
+      items: [
+        {
+          id: "removedor-1",
+          name: "Removedor de extensiones adhesivas",
+          type: "unknown",
+          quantity: 1,
+          unitPrice: null,
+          lineTotal: 18000,
+          warnings: [],
+          confidence: 0.95,
+        },
+      ],
+      warnings: [],
+      confidence: 0.95,
+      rawText: "",
+    });
+
+    const recalculated = recalculateSaleLine(draft.items[0]);
+
+    expect(recalculated.itemType).toBe("product");
+    expect(recalculated.matchType).toBe("exact");
+    expect(recalculated.matchedCatalogName).toBe("Removedor de extensiones adhesivas");
+    expect(recalculated.unitLabel).toBe("unit");
+    expect(recalculated.commissionType).toBe("none");
+    expect(recalculated.commissionValue).toBe(0);
+    expect(recalculated.commissionAmount).toBe(0);
+    expect(recalculated.unitCost).toBe(5000);
+  });
 });
