@@ -1,5 +1,3 @@
-import { PDFParse } from "pdf-parse";
-
 import { parseAgendaProReceipt } from "@/features/receipt-parser/parse-agendapro";
 import { parseFreshaReceipt } from "@/features/receipt-parser/parse-fresha";
 import type {
@@ -134,7 +132,6 @@ function normalizeText(rawText: string) {
 export function detectReceiptProvider(rawText: string): ReceiptSource {
   const normalizedText = normalizeText(rawText);
 
-  // Detección explícita por marca
   if (normalizedText.includes("fresha")) {
     return "fresha";
   }
@@ -143,7 +140,6 @@ export function detectReceiptProvider(rawText: string): ReceiptSource {
     return "agendapro";
   }
 
-  // Patrones típicos de Fresha
   const looksLikeFresha =
     (normalizedText.includes("subtotal") &&
       normalizedText.includes("iva 19%") &&
@@ -156,7 +152,6 @@ export function detectReceiptProvider(rawText: string): ReceiptSource {
     return "fresha";
   }
 
-  // Patrones típicos de AgendaPro
   const looksLikeAgendaPro =
     normalizedText.includes("detalle de la venta") ||
     normalizedText.includes("importe base") ||
@@ -331,10 +326,26 @@ export async function extractPdfTextFromBuffer(
     );
   }
 
-  const safeBuffer = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const parser = new PDFParse({ data: safeBuffer });
+  const safeBuffer =
+    buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
+  let parser: {
+    getText: () => Promise<{ text?: string }>;
+    destroy?: () => Promise<void> | void;
+  } | null = null;
 
   try {
+    const pdfParseModule = await import("pdf-parse");
+    const PDFParse = pdfParseModule.PDFParse;
+
+    if (typeof PDFParse !== "function") {
+      throw new Error(
+        "La librería pdf-parse no expuso PDFParse como constructor válido."
+      );
+    }
+
+    parser = new PDFParse({ data: safeBuffer });
+
     logReceiptEvent("starting_pdf_extraction", {
       fileName: options.fileName,
       byteLength: safeBuffer.byteLength,
@@ -366,7 +377,7 @@ export async function extractPdfTextFromBuffer(
     });
   } finally {
     try {
-      await parser.destroy();
+      await parser?.destroy?.();
     } catch {
       // noop
     }
