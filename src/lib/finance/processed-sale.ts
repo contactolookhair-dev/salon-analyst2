@@ -197,7 +197,7 @@ export function processParsedSale(document: ParsedReceiptDocument): ProcessedSal
     branchName: (branch?.name as BranchName | null) ?? null,
     date: document.date,
     professionalId: professional?.id ?? null,
-    professionalName: professional?.name ?? null,
+    professionalName: professional?.name ?? document.professionalName ?? null,
     clientName: document.clientName,
     items: processedItems,
     totals: {
@@ -213,4 +213,3 @@ export function processParsedSale(document: ParsedReceiptDocument): ProcessedSal
     materials: aggregateMaterials(processedItems),
   };
 }
-

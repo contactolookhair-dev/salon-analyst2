@@ -1,269 +1,111 @@
-import type {
-  ParsedReceiptDocument,
-  QuantityUnit,
-} from "@/shared/types/sales-processing";
+import type { ParsedReceiptDocument, QuantityUnit } from "@/shared/types/sales-processing";
 
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+import {
+  extractCurrency,
+  extractKnownBranch,
+  extractValue,
+  normalizeWhitespace,
+  parseDateToIso,
+} from "@/features/receipt-parser/parser-utils";
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parseCLP(value: string) {
-  if (!value) return 0;
-
-  const cleaned = value
-    .replace(/\s+/g, "")
-    .replace(/\$/g, "")
-    .trim();
-
-  const hasComma = cleaned.includes(",");
-  const hasDot = cleaned.includes(".");
-
-  if (hasComma && hasDot) {
-    const lastComma = cleaned.lastIndexOf(",");
-    const lastDot = cleaned.lastIndexOf(".");
-
-    // Formato chileno: 40.000,00
-    if (lastComma > lastDot) {
-      const normalized = cleaned.replace(/\./g, "").replace(",", ".");
-      const result = Number(normalized);
-      return Number.isFinite(result) ? Math.round(result) : 0;
-    }
-
-    // Formato tipo USD: 84,000.00
-    const normalized = cleaned.replace(/,/g, "");
-    const result = Number(normalized);
-    return Number.isFinite(result) ? Math.round(result) : 0;
-  }
-
-  if (hasComma) {
-    const parts = cleaned.split(",");
-
-    // Si tiene coma y al final 1-2 dígitos, asumimos decimal
-    if (parts.length === 2 && parts[1].length <= 2) {
-      const normalized = cleaned.replace(/\./g, "").replace(",", ".");
-      const result = Number(normalized);
-      return Number.isFinite(result) ? Math.round(result) : 0;
-    }
-
-    // Si no, asumimos separador de miles
-    const normalized = cleaned.replace(/,/g, "");
-    const result = Number(normalized);
-    return Number.isFinite(result) ? Math.round(result) : 0;
-  }
-
-  if (hasDot) {
-    const parts = cleaned.split(".");
-
-    // Si tiene punto y al final 1-2 dígitos, asumimos decimal
-    if (parts.length === 2 && parts[1].length <= 2) {
-      const result = Number(cleaned);
-      return Number.isFinite(result) ? Math.round(result) : 0;
-    }
-
-    // Si no, asumimos separador de miles
-    const normalized = cleaned.replace(/\./g, "");
-    const result = Number(normalized);
-    return Number.isFinite(result) ? Math.round(result) : 0;
-  }
-
-  const result = Number(cleaned);
-  return Number.isFinite(result) ? Math.round(result) : 0;
-}
-
-function extractValue(rawText: string, labels: string[]) {
-  for (const label of labels) {
-    const escapedLabel = escapeRegExp(label);
-
-    const patterns = [
-      new RegExp(`${escapedLabel}\\s*:?\\s*(.+)`, "i"),
-      new RegExp(`${escapedLabel}\\s*\\n\\s*(.+)`, "i"),
-    ];
-
-    for (const regex of patterns) {
-      const match = rawText.match(regex);
-
-      if (match?.[1]?.trim()) {
-        return match[1].trim();
-      }
-    }
-  }
-
-  return "";
-}
-
-function extractCurrencyFromLabels(rawText: string, labels: string[]) {
-  for (const label of labels) {
-    const escapedLabel = escapeRegExp(label);
-
-    const patterns = [
-      new RegExp(
-        `${escapedLabel}\\s*:?\\s*\\$?\\s*([\\d.,]+)`,
-        "i"
-      ),
-      new RegExp(
-        `${escapedLabel}[\\s\\S]{0,40}?\\$\\s*([\\d.,]+)`,
-        "i"
-      ),
-    ];
-
-    for (const regex of patterns) {
-      const match = rawText.match(regex);
-
-      if (match?.[1]) {
-        const parsed = parseCLP(match[1]);
-        if (parsed > 0) {
-          return parsed;
-        }
-      }
-    }
-  }
-
-  return 0;
-}
-
-function extractQuantity(rawText: string) {
-  const quantityMatch = rawText.match(
-    /(cantidad|cant\.?|pares|laminas|láminas|unidades|qty)\s*:?[\s-]*(\d+)/i
-  );
-
-  return quantityMatch?.[2] ? Number(quantityMatch[2]) : 1;
-}
-
-function extractUnit(rawText: string): QuantityUnit | undefined {
-  if (/(pares|par)\b/i.test(rawText)) {
+function inferUnitFromServiceName(serviceName: string): QuantityUnit | undefined {
+  if (/(pares|par)\b/i.test(serviceName)) {
     return "pair";
   }
 
-  if (/(laminas|láminas|lamina|lámina)\b/i.test(rawText)) {
+  if (/(laminas|láminas|lamina|lámina)\b/i.test(serviceName)) {
     return "sheet";
-  }
-
-  if (/(sesion|sesión|session)\b/i.test(rawText)) {
-    return "session";
-  }
-
-  if (/(unidades|unidad|unit)\b/i.test(rawText)) {
-    return "unit";
   }
 
   return undefined;
 }
 
-function extractServiceName(rawText: string) {
-  const directValue = extractValue(rawText, [
-    "Servicio",
-    "Service",
-    "Treatment",
-    "Detalle de la venta",
-    "Detalle venta",
-  ]);
+function extractClient(rawText: string) {
+  const labeledClient = extractValue(rawText, ["Cliente", "Client"]);
 
-  if (
-    directValue &&
-    !/^ticket\s*#/i.test(directValue) &&
-    !/^cliente\b/i.test(directValue) &&
-    !/^fecha\b/i.test(directValue)
-  ) {
-    return directValue;
+  if (labeledClient) {
+    return labeledClient;
   }
 
-  const lines = rawText
-    .split("\n")
-    .map((line) => normalizeText(line))
-    .filter(Boolean);
+  const detailIndex = rawText.indexOf("Detalle de la venta");
 
-  const detailIndex = lines.findIndex((line) =>
-    /detalle de la venta|detalle venta/i.test(line)
+  if (detailIndex === -1) {
+    return "Cliente no identificado";
+  }
+
+  const beforeDetail = rawText.slice(0, detailIndex);
+  const lines = beforeDetail
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter(
+      (line) =>
+        !/^rut:/i.test(line) &&
+        !/^direcci[oó]n:/i.test(line) &&
+        !/^nivel/i.test(line) &&
+        !/^condes/i.test(line) &&
+        !/^apumanque/i.test(line)
+    );
+
+  return lines[lines.length - 1] ?? "Cliente no identificado";
+}
+
+function extractItems(rawText: string) {
+  const itemBlockMatch = rawText.match(
+    /Detalle de la venta\s+([\s\S]+?)\s+TOTAL\s*:?\s*\$\s*[\d.,]+/i
   );
 
-  if (detailIndex >= 0) {
-    for (let i = detailIndex + 1; i < Math.min(detailIndex + 8, lines.length); i += 1) {
-      const line = lines[i];
-
-      if (
-        !/ticket\s*#|fecha|cliente|atendido por|importe base|total|monto pagado/i.test(
-          line
-        ) &&
-        !/^\$?\s*[\d.,]+$/.test(line)
-      ) {
-        return line;
-      }
-    }
+  if (!itemBlockMatch?.[1]) {
+    return [];
   }
 
-  return "";
+  const normalizedBlock = normalizeWhitespace(itemBlockMatch[1]).replace(
+    /\s+\$\s*/g,
+    " $"
+  );
+  const matches = normalizedBlock.matchAll(
+    /(.+?)\s+x(\d+)\s+\$([\d.,]+)/g
+  );
+
+  return Array.from(matches).map((match) => ({
+    rawName: normalizeWhitespace(match[1]),
+    quantity: Number(match[2]),
+    unit: inferUnitFromServiceName(match[1]),
+    lineTotal: extractCurrency(match[3]),
+    notes: "",
+  }));
 }
 
 function extractDate(rawText: string) {
-  return (
-    extractValue(rawText, ["Fecha", "Date"]) ||
-    rawText.match(
-      /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{4})/i
-    )?.[1] ||
-    ""
-  );
-}
+  const labeledDate = extractValue(rawText, ["Fecha", "Date"]);
 
-function extractProfessional(rawText: string) {
-  return (
-    extractValue(rawText, [
-      "Profesional",
-      "Staff",
-      "Employee",
-      "Atendido por",
-    ]) || ""
-  );
-}
+  if (labeledDate) {
+    return parseDateToIso(labeledDate);
+  }
 
-function extractBranch(rawText: string) {
-  return (
-    extractValue(rawText, ["Sucursal", "Branch", "Location"]) || ""
-  );
-}
-
-function extractClient(rawText: string) {
-  return (
-    extractValue(rawText, ["Cliente", "Client"]) || "Cliente no identificado"
-  );
+  const numericDateMatch = rawText.match(/(\d{2}-\d{2}-\d{4})(?:\s+\d{2}:\d{2})?/);
+  return numericDateMatch?.[1] ? parseDateToIso(numericDateMatch[1]) : "";
 }
 
 export function parseAgendaProReceipt(rawText: string): ParsedReceiptDocument {
-  const serviceName = extractServiceName(rawText);
-
-  const lineGross =
-    extractCurrencyFromLabels(rawText, [
-      "Precio",
-      "Price",
-      "Subtotal",
-      "Total linea",
-      "Total línea",
-      "Importe base",
-    ]) || 0;
-
-  const totalDocument =
-    extractCurrencyFromLabels(rawText, [
-      "Total",
-      "Total a pagar",
-      "Monto total",
-      "Monto pagado",
-    ]) || 0;
-
-  const branchName = extractBranch(rawText);
-  const professionalName = extractProfessional(rawText);
-  const clientName = extractClient(rawText);
+  const items = extractItems(rawText);
+  const branchName =
+    extractValue(rawText, ["Sucursal", "Branch", "Location"]) ||
+    extractKnownBranch(rawText);
   const date = extractDate(rawText);
-
+  const totalDocument =
+    extractCurrency(extractValue(rawText, ["Total", "Total a pagar", "Monto total"])) ||
+    extractCurrency(extractValue(rawText, ["TOTAL", "Monto pagado"]));
+  const professionalName =
+    extractValue(rawText, ["Profesional", "Staff", "Employee"]) ||
+    normalizeWhitespace(
+      rawText.match(/Atendido por:\s*([^\n,]+)/i)?.[1] ??
+        rawText.match(/([^\n]+)\s+\(prestador\)/i)?.[1] ??
+        ""
+    );
   const observations: string[] = [];
 
-  if (!serviceName) {
+  if (items.length === 0) {
     observations.push("No se pudo detectar el nombre del servicio o producto.");
   }
 
@@ -279,28 +121,14 @@ export function parseAgendaProReceipt(rawText: string): ParsedReceiptDocument {
     observations.push("No se pudo detectar la fecha en la boleta.");
   }
 
-  if (totalDocument <= 0 && lineGross <= 0) {
-    observations.push("No se pudo detectar un monto válido en la boleta.");
-  }
-
   return {
     source: "agendapro",
     date,
     branchName,
     professionalName,
-    clientName,
-    items: serviceName
-      ? [
-        {
-          rawName: serviceName,
-          quantity: extractQuantity(rawText),
-          unit: extractUnit(rawText),
-          lineTotal: lineGross || totalDocument,
-          notes: extractValue(rawText, ["Observaciones", "Notes"]),
-        },
-      ]
-      : [],
-    totalDocument: totalDocument || lineGross,
+    clientName: extractClient(rawText),
+    items,
+    totalDocument,
     observations,
     rawText,
   };

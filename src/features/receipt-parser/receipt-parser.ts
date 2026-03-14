@@ -236,7 +236,10 @@ function mapPdfParseError(error: unknown, context: ParserFailureContext) {
   );
 }
 
-export function parseReceiptText(rawText: string): ParsedReceiptDocument {
+export function parseReceiptText(
+  rawText: string,
+  options: ReceiptProcessingOptions = {}
+): ParsedReceiptDocument {
   const provider = detectReceiptProvider(rawText);
 
   if (provider === "unknown") {
@@ -245,6 +248,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptDocument {
       "provider_detection",
       "unknown_provider",
       {
+        fileName: options.fileName,
         rawText,
         detectedSource: provider,
         warnings: [
@@ -260,13 +264,20 @@ export function parseReceiptText(rawText: string): ParsedReceiptDocument {
       : parseAgendaProReceipt(rawText);
 
   const validationWarnings = validateParsedReceipt(parsedReceipt);
+  const criticalWarnings = validationWarnings.filter(
+    (warning) =>
+      warning === "Falta total en el documento." ||
+      warning === "No se encontraron servicios o productos en la boleta." ||
+      warning === "No se pudo detectar el total bruto de los items."
+  );
 
-  if (validationWarnings.length > 0) {
+  if (criticalWarnings.length > 0) {
     throw new ReceiptParserError(
-      validationWarnings[0] ?? "Faltan datos relevantes en la boleta.",
+      criticalWarnings[0] ?? "Faltan datos relevantes en la boleta.",
       "field_parsing",
       "missing_required_fields",
       {
+        fileName: options.fileName,
         rawText,
         detectedSource: provider,
         warnings: validationWarnings,
@@ -274,6 +285,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptDocument {
     );
   }
 
+  parsedReceipt.observations = validationWarnings;
   return parsedReceipt;
 }
 
@@ -281,7 +293,7 @@ export function processReceiptText(
   rawText: string,
   options: ReceiptProcessingOptions = {}
 ): ReceiptProcessingResult {
-  const parsedReceipt = parseReceiptText(rawText);
+  const parsedReceipt = parseReceiptText(rawText, options);
 
   try {
     return {

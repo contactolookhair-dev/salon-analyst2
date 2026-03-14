@@ -63,13 +63,10 @@ Total: $45.000`);
 
   it("falla con mensaje claro cuando no reconoce Fresha ni AgendaPro", () => {
     expect(() =>
-      processReceiptText(`Salon interno
-Fecha: 2026-03-12
-Sucursal: Look Hair Extensions
-Cliente: Daniela T.
-Profesional: Darling
-Servicio: Mantencion adhesiva
-Total: $45.000`)
+      processReceiptText(`Comprobante interno
+Movimiento manual
+Registro operativo
+Sin proveedor detectado`)
     ).toThrow("No se pudo identificar si la boleta es de Fresha o AgendaPro.");
   });
 
@@ -89,8 +86,84 @@ Total: $45.000`)
 
     expect(response.code).toBe("invalid_pdf");
     expect(response.error).toBe(
-      "El archivo no parece ser un PDF valido o esta dañado."
+      "El archivo no parece ser un PDF válido o está dañado."
     );
     expect(response.fallback.fileName).toBe("archivo-roto.pdf");
+  });
+
+  it("parsea un formato real de Fresha sin labels explicitos", () => {
+    const result = processReceiptText(`House of Hair
+House of Hair
++56 9 87606049
+Sale 301
+Wednesday, 11 Mar 2026 en 16:20
+Cliente
+Alex Flores
++56 9 76240248
+1 Protesis Tono #2 $289,990.00
+House of Hair
+Subtotal $243,689.08
+Iva 19% $46,300.92
+Total $289,990.00
+Crédito $289,990.00`);
+
+    expect(result.parsedReceipt).toMatchObject({
+      source: "fresha",
+      branchName: "House Of Hair",
+      date: "2026-03-11",
+      clientName: "Alex Flores",
+      totalDocument: 289990,
+    });
+    expect(result.parsedReceipt.items[0]).toMatchObject({
+      rawName: "Protesis Tono #2",
+      quantity: 1,
+      lineTotal: 289990,
+    });
+  });
+
+  it("parsea un formato real de AgendaPro con multiples lineas", () => {
+    const result = processReceiptText(`Look Hair Extensions
+RUT: 78.166.658-0
+Dirección: Av. Manquehue Sur 31
+Nivel 2 local 374, Las
+Condes.Centro Comercial
+Apumanque.
+Roxana Bejarano
+Detalle de la venta
+MANTENCIÓN DE EXTENSION
+ADHESIVA x1 $ 4.000
+MANTENCIÓN DE EXTENSION
+ADHESIVA x9 $ 36.000
+TOTAL: $ 40.000,00
+IMPORTE BASE: $ 33.613,45
+IVA: $ 6.386,55
+TOTAL : $ 40.000
+Monto pagado : $ 40.000
+Monto por pagar : $ 0
+Venta #3053
+Ticket #37366916
+12-03-2026 15:05
+Pagado en: Pos
+Atendido por: Edixon Mendoza,
+Edixon Mendoza (prestador)`);
+
+    expect(result.parsedReceipt).toMatchObject({
+      source: "agendapro",
+      branchName: "Look Hair Extensions",
+      date: "2026-03-12",
+      clientName: "Roxana Bejarano",
+      professionalName: "Edixon Mendoza",
+      totalDocument: 40000,
+    });
+    expect(result.parsedReceipt.items).toHaveLength(2);
+    expect(result.parsedReceipt.items[0]).toMatchObject({
+      rawName: "MANTENCIÓN DE EXTENSION ADHESIVA",
+      quantity: 1,
+      lineTotal: 4000,
+    });
+    expect(result.parsedReceipt.items[1]).toMatchObject({
+      quantity: 9,
+      lineTotal: 36000,
+    });
   });
 });
