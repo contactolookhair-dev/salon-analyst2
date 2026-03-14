@@ -52,6 +52,40 @@ const emptyForm: ProfessionalFormState = {
   avatarColor: "#7c6f4f",
 };
 
+function createProfessionalFromForm(form: ProfessionalFormState): Professional {
+  const normalizedId =
+    form.id?.trim() ||
+    form.name
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+  return {
+    id: normalizedId,
+    name: form.name.trim(),
+    role: form.role.trim() || "Profesional",
+    branchIds: form.branchIds,
+    primaryBranchId: form.primaryBranchId || form.branchIds[0] || null,
+    active: form.active,
+    commissionMode: form.commissionMode,
+    commissionValue:
+      form.commissionMode === "system_rules" || form.commissionMode === "none"
+        ? undefined
+        : form.commissionValue,
+    phone: form.phone.trim() || undefined,
+    emergencyPhone: form.emergencyPhone.trim() || undefined,
+    email: form.email.trim() || undefined,
+    documentId: form.documentId.trim() || undefined,
+    notes: form.notes.trim() || undefined,
+    avatarColor: form.avatarColor.trim() || undefined,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function createFormFromProfessional(professional?: Professional | null): ProfessionalFormState {
   if (!professional) {
     return emptyForm;
@@ -219,10 +253,25 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       setEditorOpen(false);
       setForm(emptyForm);
     } catch (submitError) {
+      const fallbackProfessional = createProfessionalFromForm(form);
+      upsertBrowserProfessional(fallbackProfessional);
+      setProfessionals((currentProfessionals) =>
+        mergeProfessionals(
+          upsertProfessional(currentProfessionals, fallbackProfessional),
+          loadBrowserProfessionals()
+        )
+      );
+      setQuery("");
+      setBranchFilter("all");
+      setRoleFilter("all");
+      setStatusFilter("all");
+      setEditorOpen(false);
+      setForm(emptyForm);
+      notifyBusinessSnapshotUpdated();
       setError(
         submitError instanceof Error
-          ? submitError.message
-          : "No pude guardar el profesional."
+          ? `${submitError.message} Guardé este profesional localmente en este navegador para que puedas seguir trabajando.`
+          : "No pude guardar en el servidor. El profesional quedó guardado localmente en este navegador."
       );
     } finally {
       setIsSaving(false);

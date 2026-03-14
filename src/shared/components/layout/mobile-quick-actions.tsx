@@ -31,8 +31,8 @@ export function MobileQuickActions() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] right-4 z-50 flex flex-col gap-3 lg:hidden"
-      aria-label="Acciones rapidas moviles"
+      className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] right-4 z-50 flex flex-col gap-3"
+      aria-label="Acciones rapidas"
     >
       <button
         type="button"
