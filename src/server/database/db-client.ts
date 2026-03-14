@@ -6,12 +6,50 @@ declare global {
   var __salonPrismaAdapter: PrismaBetterSqlite3 | undefined;
 }
 
-export function getDbClient() {
+type DbStatus = {
+  available: boolean;
+  persistent: boolean;
+  reason?: string;
+};
+
+export function getDbStatus(): DbStatus {
   const databaseUrl = process.env.DATABASE_URL;
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
 
   if (!databaseUrl) {
+    return {
+      available: false,
+      persistent: false,
+      reason: "No hay DATABASE_URL configurada.",
+    };
+  }
+
+  const usesLocalSqlite = databaseUrl.startsWith("file:");
+
+  if (isProduction && usesLocalSqlite) {
+    return {
+      available: false,
+      persistent: false,
+      reason:
+        "La versión online está usando SQLite local, que no persiste en Vercel. Debes conectar una base de datos persistente para compartir datos entre navegador, celular y despliegues.",
+    };
+  }
+
+  return {
+    available: true,
+    persistent: true,
+  };
+}
+
+export function getDbClient() {
+  const status = getDbStatus();
+
+  if (!status.available) {
     return null;
   }
+
+  const databaseUrl = process.env.DATABASE_URL as string;
 
   if (!global.__salonPrismaAdapter) {
     global.__salonPrismaAdapter = new PrismaBetterSqlite3({

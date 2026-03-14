@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { BusinessSnapshot } from "@/features/dashboard/data/mock-dashboard";
-import { loadBrowserProfessionals, mergeProfessionals } from "@/features/team/lib/browser-professionals-storage";
 import { subscribeBusinessSnapshotRefresh } from "@/shared/lib/business-snapshot-events";
 import type { BranchFilter } from "@/shared/types/business";
 
@@ -35,23 +34,10 @@ export function useBusinessSnapshot(branch: BranchFilter) {
       }
 
       const payload = (await response.json()) as BusinessSnapshot;
-      const browserProfessionals = loadBrowserProfessionals().filter((professional) =>
-        branch === "all" ? true : professional.branchIds.includes(branch)
-      );
 
-      setSnapshot({
-        ...payload,
-        professionals: mergeProfessionals(payload.professionals, browserProfessionals),
-      });
+      setSnapshot(payload);
     } catch {
-      const browserProfessionals = loadBrowserProfessionals().filter((professional) =>
-        branch === "all" ? true : professional.branchIds.includes(branch)
-      );
-
-      setSnapshot({
-        ...createEmptySnapshot(branch),
-        professionals: browserProfessionals,
-      });
+      setSnapshot(createEmptySnapshot(branch));
     } finally {
       setIsLoading(false);
     }

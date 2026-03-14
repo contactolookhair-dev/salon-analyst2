@@ -4,12 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2, UserRound } from "lucide-react";
 
 import { branches } from "@/features/branches/data/mock-branches";
-import {
-  loadBrowserProfessionals,
-  mergeProfessionals,
-  saveBrowserProfessionals,
-  upsertBrowserProfessional,
-} from "@/features/team/lib/browser-professionals-storage";
 import { Card } from "@/shared/components/ui/card";
 import { notifyBusinessSnapshotUpdated } from "@/shared/lib/business-snapshot-events";
 import type { BranchId, Professional, ProfessionalCommissionMode } from "@/shared/types/business";
@@ -111,13 +105,11 @@ function createFormFromProfessional(professional?: Professional | null): Profess
 function upsertProfessional(items: Professional[], professional: Professional) {
   const nextItems = items.filter((item) => item.id !== professional.id);
   nextItems.push(professional);
-  return mergeProfessionals(nextItems, []);
+  return [...nextItems].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminProps) {
-  const [professionals, setProfessionals] = useState<Professional[]>(
-    mergeProfessionals(initialProfessionals, [])
-  );
+  const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals);
   const [query, setQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState<"all" | BranchId>("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -126,14 +118,10 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
   const [form, setForm] = useState<ProfessionalFormState>(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setProfessionals((currentProfessionals) =>
-      mergeProfessionals(
-        mergeProfessionals(currentProfessionals, initialProfessionals),
-        loadBrowserProfessionals()
-      )
-    );
+    setProfessionals(initialProfessionals);
   }, [initialProfessionals]);
 
   const roles = useMemo(
@@ -189,8 +177,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       throw new Error(payload.error ?? "No pude cargar profesionales.");
     }
 
-    const mergedProfessionals = mergeProfessionals(payload.data, loadBrowserProfessionals());
-    setProfessionals(mergedProfessionals);
+    setProfessionals(payload.data);
     notifyBusinessSnapshotUpdated();
   }
 
@@ -198,6 +185,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
     try {
       setIsSaving(true);
       setError(null);
+      setSuccessMessage(null);
 
       const response = await fetch("/api/professionals", {
         method: form.id ? "PATCH" : "POST",
@@ -226,13 +214,8 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       }
 
       if (payload.data) {
-        upsertBrowserProfessional(payload.data as Professional);
-
         setProfessionals((currentProfessionals) =>
-          mergeProfessionals(
-            upsertProfessional(currentProfessionals, payload.data as Professional),
-            loadBrowserProfessionals()
-          )
+          upsertProfessional(currentProfessionals, payload.data as Professional)
         );
       }
 
@@ -243,26 +226,12 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       await refreshProfessionals();
       setEditorOpen(false);
       setForm(emptyForm);
+      setSuccessMessage("Guardado correctamente.");
     } catch (submitError) {
-      const fallbackProfessional = createProfessionalFromForm(form);
-      upsertBrowserProfessional(fallbackProfessional);
-      setProfessionals((currentProfessionals) =>
-        mergeProfessionals(
-          upsertProfessional(currentProfessionals, fallbackProfessional),
-          loadBrowserProfessionals()
-        )
-      );
-      setQuery("");
-      setBranchFilter("all");
-      setRoleFilter("all");
-      setStatusFilter("all");
-      setEditorOpen(false);
-      setForm(emptyForm);
-      notifyBusinessSnapshotUpdated();
       setError(
         submitError instanceof Error
-          ? `${submitError.message} Guardé este profesional localmente en este navegador para que puedas seguir trabajando.`
-          : "No pude guardar en el servidor. El profesional quedó guardado localmente en este navegador."
+          ? `No se pudo guardar. ${submitError.message}`
+          : "No se pudo guardar."
       );
     } finally {
       setIsSaving(false);
@@ -279,6 +248,8 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
     }
 
     try {
+      setError(null);
+      setSuccessMessage(null);
       const response = await fetch("/api/professionals", {
         method: "DELETE",
         headers: {
@@ -297,32 +268,26 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
         throw new Error(payload.error ?? "No pude eliminar el profesional.");
       }
 
-      const nextLocalProfessionals = mergeProfessionals(
-        loadBrowserProfessionals().filter((item) => item.id !== professional.id),
-        [{ ...professional, active: false }]
-      );
-      saveBrowserProfessionals(nextLocalProfessionals);
       setProfessionals((currentProfessionals) =>
-        mergeProfessionals(
-          currentProfessionals.map((item) =>
-            item.id === professional.id ? { ...item, active: false } : item
-          ),
-          nextLocalProfessionals
+        currentProfessionals.map((item) =>
+          item.id === professional.id ? { ...item, active: false } : item
         )
       );
-      notifyBusinessSnapshotUpdated();
       await refreshProfessionals();
+      setSuccessMessage("Guardado correctamente.");
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
-          ? deleteError.message
-          : "No pude eliminar el profesional."
+          ? `No se pudo guardar. ${deleteError.message}`
+          : "No se pudo guardar."
       );
     }
   }
 
   async function handleToggleActive(professional: Professional) {
     try {
+      setError(null);
+      setSuccessMessage(null);
       const response = await fetch("/api/professionals", {
         method: "PATCH",
         headers: {
@@ -346,24 +311,21 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       }
 
       if (payload.data) {
-        upsertBrowserProfessional(payload.data);
         setProfessionals((currentProfessionals) =>
-          mergeProfessionals(
-            currentProfessionals.map((item) =>
-              item.id === professional.id ? payload.data! : item
-            ),
-            loadBrowserProfessionals()
+          currentProfessionals.map((item) =>
+            item.id === professional.id ? payload.data! : item
           )
         );
       }
 
       notifyBusinessSnapshotUpdated();
       await refreshProfessionals();
+      setSuccessMessage("Guardado correctamente.");
     } catch (toggleError) {
       setError(
         toggleError instanceof Error
-          ? toggleError.message
-          : "No pude actualizar el estado."
+          ? `No se pudo guardar. ${toggleError.message}`
+          : "No se pudo guardar."
       );
     }
   }
@@ -448,6 +410,12 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
       {error ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {successMessage}
         </div>
       ) : null}
 

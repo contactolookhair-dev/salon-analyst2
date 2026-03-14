@@ -6,9 +6,28 @@ import {
   getProfessionalsFromStorage,
   updateProfessionalInStorage,
 } from "@/server/database/business-repository";
+import { getDbStatus } from "@/server/database/db-client";
 import type { Professional } from "@/shared/types/business";
 
 export const runtime = "nodejs";
+
+function ensurePersistentDb() {
+  const dbStatus = getDbStatus();
+
+  if (!dbStatus.available || !dbStatus.persistent) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          dbStatus.reason ??
+          "No hay una base de datos persistente configurada para guardar trabajadores.",
+      },
+      { status: 503 }
+    );
+  }
+
+  return null;
+}
 
 function safeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -67,6 +86,12 @@ function buildProfessionalResponse(body: Record<string, unknown>): Professional 
 }
 
 export async function GET() {
+  const dbError = ensurePersistentDb();
+
+  if (dbError) {
+    return dbError;
+  }
+
   try {
     const professionals = await getProfessionalsFromStorage();
     return NextResponse.json({ success: true, data: professionals });
@@ -85,6 +110,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const dbError = ensurePersistentDb();
+
+  if (dbError) {
+    return dbError;
+  }
+
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const branchIds = safeBranchIds(body.branchIds);
@@ -142,6 +173,12 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const dbError = ensurePersistentDb();
+
+  if (dbError) {
+    return dbError;
+  }
+
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const professionalId = safeString(body.id);
@@ -201,6 +238,12 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const dbError = ensurePersistentDb();
+
+  if (dbError) {
+    return dbError;
+  }
+
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const professionalId = safeString(body.id);
