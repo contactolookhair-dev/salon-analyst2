@@ -524,7 +524,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Venta bruta total
                     </p>
-                    <p className="mt-3 whitespace-nowrap text-[clamp(1.9rem,2.2vw,2.3rem)] font-semibold leading-none text-olive-950">
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.55rem,1.9vw,1.95rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(grossTotal)}
                     </p>
                   </div>
@@ -532,7 +532,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Venta neta total
                     </p>
-                    <p className="mt-3 whitespace-nowrap text-[clamp(1.9rem,2.2vw,2.3rem)] font-semibold leading-none text-olive-950">
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.55rem,1.9vw,1.95rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(netTotal)}
                     </p>
                   </div>
@@ -540,7 +540,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Comisión total
                     </p>
-                    <p className="mt-3 whitespace-nowrap text-[clamp(1.9rem,2.2vw,2.3rem)] font-semibold leading-none text-olive-950">
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.55rem,1.9vw,1.95rem)] font-semibold leading-none text-olive-950">
                       {formatCurrency(commissionTotal)}
                     </p>
                   </div>
@@ -564,43 +564,14 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
               Este listado respeta el mismo rango de fechas activo del bloque “Control del equipo por rango de fechas”.
             </p>
           </div>
-          <div className="grid gap-3 rounded-[20px] bg-[#fbfaf6] px-4 py-3 text-sm md:grid-cols-2">
-            <label className="space-y-2">
-              <span className="block text-muted-foreground">Rango aplicado · desde</span>
-              <div className="relative">
-                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-olive-700" />
-                <input
-                  type="date"
-                  value={teamDateRange.from}
-                  max={teamDateRange.to}
-                  onChange={(event) =>
-                    setTeamDateRange((current) => ({
-                      ...current,
-                      from: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-2xl border border-olive-950/10 bg-white py-3 pl-10 pr-4 text-olive-950"
-                />
-              </div>
-            </label>
-            <label className="space-y-2">
-              <span className="block text-muted-foreground">Rango aplicado · hasta</span>
-              <div className="relative">
-                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-olive-700" />
-                <input
-                  type="date"
-                  value={teamDateRange.to}
-                  min={teamDateRange.from}
-                  onChange={(event) =>
-                    setTeamDateRange((current) => ({
-                      ...current,
-                      to: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-2xl border border-olive-950/10 bg-white py-3 pl-10 pr-4 text-olive-950"
-                />
-              </div>
-            </label>
+          <div className="rounded-[20px] bg-[#fbfaf6] px-4 py-3 text-sm">
+            <p className="text-muted-foreground">Rango aplicado</p>
+            <p className="mt-2 font-semibold text-olive-950">
+              {formatDateLabel(teamDateRange.from)} - {formatDateLabel(teamDateRange.to)}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Este rango proviene del bloque superior “Control del equipo por rango de fechas”.
+            </p>
           </div>
         </div>
 
