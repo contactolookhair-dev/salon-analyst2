@@ -11,6 +11,7 @@ import {
 
 import { Card } from "@/shared/components/ui/card";
 import { useBranch } from "@/shared/context/branch-context";
+import { notifySaleMutation } from "@/shared/lib/business-snapshot-events";
 import { formatCurrency } from "@/shared/lib/utils";
 import type { Professional, Sale } from "@/shared/types/business";
 
@@ -320,6 +321,14 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
         throw new Error(payload.error || "No se pudo eliminar la venta.");
       }
 
+      notifySaleMutation({
+        action: "deleted",
+        professionalName:
+          professionals.find((professional) => professional.id === sale.professionalId)?.name ??
+          sale.professionalId,
+        clientName: sale.clientName,
+        grossAmount: sale.grossAmount,
+      });
       onRegistered?.();
     } catch (error) {
       setSaleActionError(
@@ -362,6 +371,12 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
         throw new Error(payload.error || "No se pudo editar la venta.");
       }
 
+      notifySaleMutation({
+        action: "updated",
+        professionalName: editingSale.professionalName,
+        clientName: editingSale.clientName,
+        grossAmount: editingSale.grossAmount,
+      });
       setEditingSale(null);
       onRegistered?.();
     } catch (error) {

@@ -34,6 +34,7 @@ import type {
   SaveSaleApiResponse,
 } from "@/features/sales-register/types";
 import { getTodayChileDateString, parseSafeSaleDate } from "@/shared/lib/safe-date";
+import { notifySaleMutation } from "@/shared/lib/business-snapshot-events";
 import type { QuantityUnit } from "@/shared/types/sales-processing";
 import { Card } from "@/shared/components/ui/card";
 import { formatCurrency } from "@/shared/lib/utils";
@@ -490,6 +491,12 @@ export function SalesEntryWorkspace({
         throw new Error(payload.error);
       }
 
+      notifySaleMutation({
+        action: "created",
+        professionalName: selectedProfessional?.name ?? draft.professionalName,
+        clientName: draft.clientName,
+        grossAmount: grossTotal,
+      });
       setWarnings([payload.message]);
       onRegistered?.();
       const resetDraft = createEmptyManualSaleDraft();
@@ -770,8 +777,9 @@ export function SalesEntryWorkspace({
       </Card>
 
       {isEditorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-4 md:items-center">
-          <Card className="max-h-[92vh] w-full max-w-6xl overflow-y-auto border border-olive-950/10 bg-[#fcfaf5] shadow-[0_30px_80px_rgba(25,29,20,0.28)]">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/35 px-4 py-4 md:px-6 md:py-8">
+          <div className="mx-auto flex min-h-full w-full max-w-6xl items-start justify-center">
+            <Card className="max-h-[calc(100vh-2rem)] w-full overflow-y-auto border border-olive-950/10 bg-[#fcfaf5] shadow-[0_30px_80px_rgba(25,29,20,0.28)] md:max-h-[calc(100vh-4rem)]">
             <div className="space-y-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -1630,7 +1638,8 @@ export function SalesEntryWorkspace({
                 </button>
               </div>
             </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       ) : null}
     </section>

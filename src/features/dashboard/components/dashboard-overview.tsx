@@ -28,12 +28,17 @@ import { Card } from "@/shared/components/ui/card";
 import { SectionHeading } from "@/shared/components/ui/section-heading";
 import { useBranch } from "@/shared/context/branch-context";
 import { useBusinessSnapshot } from "@/shared/hooks/use-business-snapshot";
+import {
+  subscribeSaleMutation,
+  type SaleMutationPayload,
+} from "@/shared/lib/business-snapshot-events";
 import { formatCurrency, formatPercent } from "@/shared/lib/utils";
 
 export function DashboardOverview() {
   const { branch: selectedBranch } = useBranch();
   const { snapshot: filteredSnapshot } = useBusinessSnapshot(selectedBranch);
   const [branchConfigs, setBranchConfigs] = useState(baseBranches);
+  const [saleAlert, setSaleAlert] = useState<SaleMutationPayload | null>(null);
 
   useEffect(() => {
     const syncBranches = () => setBranchConfigs(loadEditableBranches());
@@ -44,6 +49,17 @@ export function DashboardOverview() {
     return () => {
       window.removeEventListener(BRANCH_CONFIG_UPDATED_EVENT, syncBranches);
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSaleMutation((payload) => {
+      setSaleAlert(payload);
+      window.setTimeout(() => {
+        setSaleAlert((current) => (current === payload ? null : current));
+      }, 5000);
+    });
+
+    return unsubscribe;
   }, []);
 
   const { branch, metrics, branchExpenses } = getDashboardDataFromSnapshot(
@@ -108,6 +124,39 @@ export function DashboardOverview() {
         expenses,
       };
     });
+  const workerSummaryCards = filteredSnapshot.professionals
+    .filter((professional) => professional.active)
+    .map((professional) => {
+      const professionalSales = filteredSnapshot.sales.filter(
+        (sale) => sale.professionalId === professional.id
+      );
+
+      return {
+        id: professional.id,
+        name: professional.name,
+        role: professional.role,
+        gross: professionalSales.reduce((sum, sale) => sum + sale.grossAmount, 0),
+        net: professionalSales.reduce((sum, sale) => sum + sale.netAmount, 0),
+        commission: professionalSales.reduce(
+          (sum, sale) => sum + sale.commissionValue,
+          0
+        ),
+      };
+    })
+    .sort((left, right) => right.gross - left.gross);
+
+  const saleAlertLabel = saleAlert
+    ? saleAlert.action === "created"
+      ? "Venta registrada correctamente"
+      : saleAlert.action === "updated"
+        ? "Venta actualizada correctamente"
+        : "Venta eliminada correctamente"
+    : null;
+  const saleAlertDetail = saleAlert
+    ? [saleAlert.professionalName, saleAlert.clientName]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
 
   return (
     <section className="space-y-6">
@@ -117,6 +166,15 @@ export function DashboardOverview() {
         description="Panel operativo para leer rápido ventas, utilidad, comisiones, gastos y alertas urgentes sin sobrecargar la pantalla."
         visual={branch ? <BranchLogo branch={branch} size="lg" /> : undefined}
       />
+
+      {saleAlertLabel ? (
+        <Card className="border border-emerald-200 bg-emerald-50/90 p-4">
+          <p className="text-sm font-semibold text-emerald-900">{saleAlertLabel}</p>
+          {saleAlertDetail ? (
+            <p className="mt-1 text-sm text-emerald-800">{saleAlertDetail}</p>
+          ) : null}
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.75fr)]">
         <Card className="overflow-hidden bg-olive-950 text-white">
@@ -251,6 +309,63 @@ export function DashboardOverview() {
                   </p>
                   <p className="mt-2 font-semibold text-olive-950">
                     {formatCurrency(item.expenses)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Equipo</p>
+          <h3 className="mt-1 text-xl font-semibold text-olive-950">
+            Resumen por trabajador
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Venta bruta, venta neta y comisión total acumulada por trabajador.
+          </p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {workerSummaryCards.map((worker) => (
+            <div
+              key={worker.id}
+              className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-6"
+            >
+              <div>
+                <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                  {worker.name}
+                </p>
+                <p className="mt-3 text-lg font-medium text-muted-foreground">
+                  {worker.role}
+                </p>
+              </div>
+
+              <div className="mt-8 grid gap-4 md:grid-cols-3">
+                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Venta bruta total
+                  </p>
+                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                    {formatCurrency(worker.gross)}
+                  </p>
+                </div>
+                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Venta neta total
+                  </p>
+                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                    {formatCurrency(worker.net)}
+                  </p>
+                </div>
+                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Comisión total
+                  </p>
+                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                    {formatCurrency(worker.commission)}
                   </p>
                 </div>
               </div>
