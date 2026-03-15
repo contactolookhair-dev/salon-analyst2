@@ -76,6 +76,7 @@ export function DashboardOverview() {
     );
   const totalGrossSalesToday = todaySales.reduce((sum, sale) => sum + sale.grossAmount, 0);
   const totalVatToday = Math.max(totalGrossSalesToday - metrics.totalNetSales, 0);
+  const currentMonthFrom = `${metrics.today.slice(0, 8)}01`;
 
   const recentActivity = [
     ...todaySales.slice(0, 4).map((sale) => ({
@@ -128,7 +129,10 @@ export function DashboardOverview() {
     .filter((professional) => professional.active)
     .map((professional) => {
       const professionalSales = filteredSnapshot.sales.filter(
-        (sale) => sale.professionalId === professional.id
+        (sale) =>
+          sale.professionalId === professional.id &&
+          sale.saleDate >= currentMonthFrom &&
+          sale.saleDate <= metrics.today
       );
 
       return {
@@ -157,6 +161,10 @@ export function DashboardOverview() {
         .filter(Boolean)
         .join(" · ")
     : null;
+  const activeBranchLabel =
+    selectedBranch === "all"
+      ? "Todas las sucursales"
+      : branch?.name ?? "Sucursal activa";
 
   return (
     <section className="space-y-6">
@@ -176,8 +184,177 @@ export function DashboardOverview() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.75fr)]">
-        <Card className="overflow-hidden bg-olive-950 text-white">
+      <div className="flex flex-col gap-4">
+        <Card className="xl:hidden">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Local activo</p>
+              <h3 className="mt-1 text-2xl font-semibold tracking-tight text-olive-950">
+                {activeBranchLabel}
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Este panel está mostrando la lectura operativa de la sucursal seleccionada.
+              </p>
+            </div>
+            {branch ? <BranchLogo branch={branch} size="md" /> : null}
+          </div>
+        </Card>
+
+        <div className="order-1 grid gap-4 md:grid-cols-2 xl:order-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <MetricCard
+            label="Ventas del día"
+            value={formatCurrency(totalGrossSalesToday)}
+            helper="Lectura bruta operativa acumulada."
+            icon={<ReceiptText className="size-5" />}
+          />
+          <MetricCard
+            label="Ventas netas"
+            value={formatCurrency(metrics.totalNetSales)}
+            helper={
+              !metrics.commercialTargetApplies
+                ? "Sucursal cerrada hoy. Meta comercial no exigible."
+                : `Meta diaria comercial: ${formatCurrency(metrics.dailyTarget)}.`
+            }
+            icon={<Wallet className="size-5" />}
+          />
+          <MetricCard
+            label="Comisiones del día"
+            value={formatCurrency(metrics.totalCommission)}
+            helper="Base calculada con reglas activas del negocio."
+            icon={<HandCoins className="size-5" />}
+          />
+          <MetricCard
+            label="IVA estimado"
+            value={formatCurrency(totalVatToday)}
+            helper="IVA aproximado sobre ventas del día."
+            icon={<Landmark className="size-5" />}
+          />
+          <MetricCard
+            label="Resultado contable"
+            value={formatCurrency(metrics.accountingResult)}
+            helper={`Gastos del día ${formatCurrency(metrics.totalExpenses)} · cuota fija ${formatCurrency(
+              metrics.fixedExpensesToday
+            )}.`}
+            icon={<BarChart3 className="size-5" />}
+          />
+        </div>
+
+        <Card className="order-2 space-y-4 xl:order-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Resumen por sucursal</p>
+            <h3 className="mt-1 text-xl font-semibold text-olive-950">
+              Lectura operativa del día
+            </h3>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            {branchSummaryCards.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-olive-950">{item.name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Ventas, comisiones y gasto del día para la sucursal activa.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-[var(--theme-accent)]/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
+                    Hoy
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Ventas
+                    </p>
+                    <p className="mt-2 font-semibold text-olive-950">
+                      {formatCurrency(item.gross)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Comisiones
+                    </p>
+                    <p className="mt-2 font-semibold text-olive-950">
+                      {formatCurrency(item.commission)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Gastos
+                    </p>
+                    <p className="mt-2 font-semibold text-olive-950">
+                      {formatCurrency(item.expenses)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="order-3 space-y-4 xl:order-5">
+          <div>
+            <p className="text-sm text-muted-foreground">Equipo</p>
+            <h3 className="mt-1 text-xl font-semibold text-olive-950">
+              Resumen por trabajador
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Venta bruta, venta neta y comisión total acumulada del mes por trabajador.
+            </p>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            {workerSummaryCards.map((worker) => (
+              <div
+                key={worker.id}
+                className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-6"
+              >
+                <div>
+                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                    {worker.name}
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-muted-foreground">
+                    {worker.role}
+                  </p>
+                </div>
+
+                <div className="mt-8 grid gap-4 md:grid-cols-3">
+                  <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                      Venta bruta total
+                    </p>
+                    <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                      {formatCurrency(worker.gross)}
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                      Venta neta total
+                    </p>
+                    <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                      {formatCurrency(worker.net)}
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                      Comisión total
+                    </p>
+                    <p className="text-3xl font-semibold tracking-tight text-olive-950">
+                      {formatCurrency(worker.commission)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="order-4 grid gap-4 xl:order-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.75fr)]">
+          <Card className="overflow-hidden bg-olive-950 text-white">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.22em] text-white/45">
@@ -213,166 +390,14 @@ export function DashboardOverview() {
           </div>
         </Card>
 
-        <QuickAccessCard />
+          <QuickAccessCard />
+        </div>
+
+        <div className="order-5 grid gap-4 xl:order-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <RecentActivityCard items={recentActivity} />
+          <ExpensesList items={branchExpenses} />
+        </div>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-        <MetricCard
-          label="Ventas del día"
-          value={formatCurrency(totalGrossSalesToday)}
-          helper="Lectura bruta operativa acumulada."
-          icon={<ReceiptText className="size-5" />}
-        />
-        <MetricCard
-          label="Ventas netas"
-          value={formatCurrency(metrics.totalNetSales)}
-          helper={
-            !metrics.commercialTargetApplies
-              ? "Sucursal cerrada hoy. Meta comercial no exigible."
-              : `Meta diaria comercial: ${formatCurrency(metrics.dailyTarget)}.`
-          }
-          icon={<Wallet className="size-5" />}
-        />
-        <MetricCard
-          label="Comisiones del día"
-          value={formatCurrency(metrics.totalCommission)}
-          helper="Base calculada con reglas activas del negocio."
-          icon={<HandCoins className="size-5" />}
-        />
-        <MetricCard
-          label="IVA estimado"
-          value={formatCurrency(totalVatToday)}
-          helper="IVA aproximado sobre ventas del día."
-          icon={<Landmark className="size-5" />}
-        />
-        <MetricCard
-          label="Resultado contable"
-          value={formatCurrency(metrics.accountingResult)}
-          helper={`Gastos del día ${formatCurrency(metrics.totalExpenses)} · cuota fija ${formatCurrency(
-            metrics.fixedExpensesToday
-          )}.`}
-          icon={<BarChart3 className="size-5" />}
-        />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        <RecentActivityCard items={recentActivity} />
-        <ExpensesList items={branchExpenses} />
-      </div>
-
-      <Card className="space-y-4">
-        <div>
-          <p className="text-sm text-muted-foreground">Resumen por sucursal</p>
-          <h3 className="mt-1 text-xl font-semibold text-olive-950">
-            Lectura operativa del día
-          </h3>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          {branchSummaryCards.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-olive-950">{item.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Ventas, comisiones y gasto del día para la sucursal activa.
-                  </p>
-                </div>
-                <span className="rounded-full bg-[var(--theme-accent)]/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
-                  Hoy
-                </span>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Ventas
-                  </p>
-                  <p className="mt-2 font-semibold text-olive-950">
-                    {formatCurrency(item.gross)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Comisiones
-                  </p>
-                  <p className="mt-2 font-semibold text-olive-950">
-                    {formatCurrency(item.commission)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[var(--theme-card-strong)] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Gastos
-                  </p>
-                  <p className="mt-2 font-semibold text-olive-950">
-                    {formatCurrency(item.expenses)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="space-y-4">
-        <div>
-          <p className="text-sm text-muted-foreground">Equipo</p>
-          <h3 className="mt-1 text-xl font-semibold text-olive-950">
-            Resumen por trabajador
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Venta bruta, venta neta y comisión total acumulada por trabajador.
-          </p>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          {workerSummaryCards.map((worker) => (
-            <div
-              key={worker.id}
-              className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-6"
-            >
-              <div>
-                <p className="text-3xl font-semibold tracking-tight text-olive-950">
-                  {worker.name}
-                </p>
-                <p className="mt-3 text-lg font-medium text-muted-foreground">
-                  {worker.role}
-                </p>
-              </div>
-
-              <div className="mt-8 grid gap-4 md:grid-cols-3">
-                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    Venta bruta total
-                  </p>
-                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
-                    {formatCurrency(worker.gross)}
-                  </p>
-                </div>
-                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    Venta neta total
-                  </p>
-                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
-                    {formatCurrency(worker.net)}
-                  </p>
-                </div>
-                <div className="space-y-3 rounded-2xl bg-[var(--theme-card-strong)] px-5 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    Comisión total
-                  </p>
-                  <p className="text-3xl font-semibold tracking-tight text-olive-950">
-                    {formatCurrency(worker.commission)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
 
       <AlertsIntelligenceSection snapshot={filteredSnapshot} />
     </section>
