@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 declare global {
   var __salonPrisma: PrismaClient | undefined;
+  var __salonPgPool: Pool | undefined;
 }
 
 type DbStatus = {
@@ -41,13 +44,25 @@ export function getDbStatus(): DbStatus {
 
 export function getDbClient() {
   const status = getDbStatus();
+  const databaseUrl = process.env.DATABASE_URL;
 
-  if (!status.available) {
+  if (!status.available || !databaseUrl) {
     return null;
   }
 
+  if (!global.__salonPgPool) {
+    global.__salonPgPool = new Pool({
+      connectionString: databaseUrl,
+      ssl: { rejectUnauthorized: false },
+    });
+  }
+
   if (!global.__salonPrisma) {
-    global.__salonPrisma = new PrismaClient();
+    const adapter = new PrismaPg(global.__salonPgPool);
+
+    global.__salonPrisma = new PrismaClient({
+      adapter,
+    });
   }
 
   return global.__salonPrisma;
