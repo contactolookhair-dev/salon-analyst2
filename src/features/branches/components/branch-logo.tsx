@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { useEffect, useState } from "react";
 
 import type { Branch } from "@/shared/types/business";
 import { cn } from "@/shared/lib/utils";
@@ -56,7 +56,12 @@ export function BranchLogo({
   className,
   labelClassName,
 }: BranchLogoProps) {
-  const hasLogo = Boolean(branch?.logoUrl);
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasLogo = Boolean(branch?.logoUrl) && !imageFailed;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [branch?.logoUrl]);
 
   return (
     <div
@@ -74,12 +79,16 @@ export function BranchLogo({
       aria-label={branch?.name ? `Logo de ${branch.name}` : "Logo sucursal"}
     >
       {hasLogo ? (
-        <Image
+        // Safari/iPhone renderiza con más consistencia logos cargados por usuario con img nativo.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={branch?.logoUrl ?? ""}
           alt={branch?.name ? `Logo de ${branch.name}` : "Logo sucursal"}
-          fill
-          sizes={size === "lg" ? "80px" : size === "md" ? "56px" : "40px"}
-          className="object-contain p-2"
+          className="h-full w-full object-contain p-2"
+          loading="eager"
+          decoding="async"
+          draggable={false}
+          onError={() => setImageFailed(true)}
         />
       ) : (
         <span
