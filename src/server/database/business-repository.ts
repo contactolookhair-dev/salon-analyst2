@@ -1327,6 +1327,17 @@ export async function createProfessionalInStorage(input: SaveProfessionalInput) 
     };
   }
 
+  const requiredBranchIds = Array.from(
+    new Set(
+      [
+        ...input.branchIds,
+        ...(input.primaryBranchId ? [input.primaryBranchId] : []),
+      ].filter(Boolean)
+    )
+  ) as BranchId[];
+
+  await ensureBranchIdsExist(requiredBranchIds);
+
   const professional = await db.professional.create({
     data: {
       id: input.id?.trim() || normalizeNameId(input.name),
@@ -1371,6 +1382,17 @@ export async function updateProfessionalInStorage(input: SaveProfessionalInput &
       fallback: true,
     };
   }
+
+  const requiredBranchIds = Array.from(
+    new Set(
+      [
+        ...input.branchIds,
+        ...(input.primaryBranchId ? [input.primaryBranchId] : []),
+      ].filter(Boolean)
+    )
+  ) as BranchId[];
+
+  await ensureBranchIdsExist(requiredBranchIds);
 
   const professional = await db.professional.update({
     where: { id: input.id },
@@ -1455,4 +1477,37 @@ export async function ensureBranchesSeeded() {
   });
 
   return true;
+}
+
+async function ensureBranchIdsExist(branchIds: BranchId[]) {
+  const db = getDbClient();
+
+  if (!db || branchIds.length === 0) {
+    return;
+  }
+
+  for (const branchId of branchIds) {
+    const branch = branchCatalog.find((item) => item.id === branchId);
+
+    if (!branch) {
+      continue;
+    }
+
+    await db.branch.upsert({
+      where: { id: branch.id },
+      update: {
+        name: getBranchName(branch.id),
+        logoUrl: branch.logoUrl || null,
+        primaryColor: branch.primaryColor,
+        secondaryColor: branch.secondaryColor,
+      },
+      create: {
+        id: branch.id,
+        name: getBranchName(branch.id),
+        logoUrl: branch.logoUrl || null,
+        primaryColor: branch.primaryColor,
+        secondaryColor: branch.secondaryColor,
+      },
+    });
+  }
 }
