@@ -1,16 +1,10 @@
 # Persistencia real en Vercel
 
-La app ya quedó preparada para trabajar con:
-
-- `sqlite` en local
-- `postgresql` en producción
-
 ## Variables de entorno en Vercel
 
 Configura estas variables en el proyecto:
 
 ```env
-DATABASE_PROVIDER=postgresql
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
 ```
 
@@ -44,4 +38,4 @@ Después de eso, los siguientes datos quedarán compartidos entre navegador, cel
 
 ## Nota
 
-Mientras producción siga con SQLite local o sin `DATABASE_URL` persistente, la app online no podrá compartir datos de forma real entre dispositivos.
+Si `DATABASE_URL` no apunta a Neon/PostgreSQL, la app online no podrá compartir datos de forma real entre dispositivos.

@@ -1,15 +1,18 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
-const databaseProvider = (process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase();
-const schema =
-  databaseProvider === "postgresql"
-    ? "src/server/database/prisma/schema.postgres.prisma"
-    : "src/server/database/prisma/schema.prisma";
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("Falta DATABASE_URL en las variables de entorno.");
+}
 
 export default defineConfig({
-  schema,
+  schema: "src/server/database/prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
   datasource: {
-    url: process.env.DATABASE_URL,
+    url: databaseUrl,
   },
 });

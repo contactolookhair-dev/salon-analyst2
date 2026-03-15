@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Branch {
@@ -87,28 +86,28 @@ model Sale {
 }
 
 model Expense {
-  id                   String                @id
-  title                String                @default("Gasto")
-  type                 ExpenseType           @default(VARIABLE)
-  date                 DateTime
-  branchId             String
-  category             String
-  amount               Int
-  monthlyAmount        Int?
-  active               Boolean               @default(true)
-  prorationMode        ExpenseProrationMode?
-  paymentStatus        PaymentStatus         @default(PENDING)
-  paidAmount           Int                   @default(0)
-  paidDate             DateTime?
-  paymentMethod        String?
-  paymentNote          String?
-  paymentProofName     String?
-  paymentProofDataUrl  String?
-  dueDate              DateTime?
-  notes                String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @default(now()) @updatedAt
-  branch               Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id                  String               @id
+  title               String               @default("Gasto")
+  type                ExpenseType          @default(VARIABLE)
+  date                DateTime
+  branchId            String
+  category            String
+  amount              Int
+  monthlyAmount       Int?
+  active              Boolean              @default(true)
+  prorationMode       ExpenseProrationMode?
+  paymentStatus       PaymentStatus        @default(PENDING)
+  paidAmount          Int                  @default(0)
+  paidDate            DateTime?
+  paymentMethod       String?
+  paymentNote         String?
+  paymentProofName    String?
+  paymentProofDataUrl String?
+  dueDate             DateTime?
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  branch              Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([branchId])
