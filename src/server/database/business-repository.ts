@@ -1,5 +1,6 @@
 import type {
   CommissionType as PrismaCommissionType,
+  Customer as PrismaCustomer,
   Expense as PrismaExpense,
   ExpenseProrationMode as PrismaExpenseProrationMode,
   ExpenseType as PrismaExpenseType,
@@ -13,10 +14,7 @@ import type {
 
 import { branches as branchCatalog } from "@/features/branches/data/mock-branches";
 import {
-  expenses as mockExpenses,
   getDashboardDataFromSnapshot,
-  professionals as mockProfessionals,
-  sales as mockSales,
 } from "@/features/dashboard/data/mock-dashboard";
 import { calcularNeto } from "@/lib/finance";
 import { getDbClient } from "@/server/database/db-client";
@@ -25,6 +23,7 @@ import { parseSafeDateTime, parseSafeSaleDate } from "@/shared/lib/safe-date";
 import type {
   BranchFilter,
   BranchId,
+  Customer,
   Expense,
   ExpenseProrationMode,
   ExpenseType,
@@ -38,6 +37,7 @@ type SaleRecord = PrismaSale & {
   branch: PrismaBranch;
   professional: PrismaProfessional;
   service: PrismaService;
+  customer?: PrismaCustomer | null;
 };
 
 type ExpenseRecord = PrismaExpense & {
@@ -123,7 +123,10 @@ function mapSale(record: SaleRecord): Sale {
     branchId: record.branchId as BranchId,
     branch: record.branch.name as Sale["branch"],
     professionalId,
+    customerId: record.customerId ?? undefined,
     clientName: record.clientName ?? "Cliente no registrado",
+    clientEmail: record.clientEmail ?? record.customer?.email ?? undefined,
+    clientPhone: record.clientPhone ?? record.customer?.phone ?? undefined,
     service: record.service.name,
     productName: record.service.name,
     grossAmount: record.total,
@@ -133,6 +136,17 @@ function mapSale(record: SaleRecord): Sale {
     cost,
     saleDate: formatDate(record.date),
     createdAt: formatTime(record.date),
+  };
+}
+
+function mapCustomer(record: PrismaCustomer): Customer {
+  return {
+    id: record.id,
+    name: record.name,
+    email: record.email ?? undefined,
+    phone: record.phone ?? undefined,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
   };
 }
 
@@ -311,6 +325,7 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
         branch: true,
         professional: true,
         service: true,
+        customer: true,
       },
       orderBy: { date: "asc" },
     }),
@@ -336,14 +351,7 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
     branch,
     sales: saleRecords.map(mapSale),
     expenses: expenseRecords.map(mapExpense),
-    professionals:
-      mappedProfessionals.length > 0
-        ? mappedProfessionals
-        : branch === "all"
-          ? mockProfessionals
-          : mockProfessionals.filter((professional) =>
-              professional.branchIds.includes(branch)
-            ),
+    professionals: mappedProfessionals,
   };
 }
 
@@ -358,12 +366,7 @@ export async function getBusinessSnapshotFromStorage(branch: BranchFilter) {
     branch,
     sales: [],
     expenses: [],
-    professionals:
-      branch === "all"
-        ? mockProfessionals
-        : mockProfessionals.filter((professional) =>
-          professional.branchIds.includes(branch)
-        ),
+    professionals: [],
   };
 }
 
@@ -381,6 +384,8 @@ type CreateSaleInput = {
   service: string;
   total: number;
   clientName?: string;
+  clientEmail?: string;
+  clientPhone?: string;
   commission?: number;
   profit?: number;
   receiptNumber?: string;
@@ -492,6 +497,56 @@ async function detectDuplicateSale(
   return null;
 }
 
+function buildCustomerId(
+  clientName: string | undefined,
+  clientEmail: string | undefined,
+  clientPhone: string | undefined
+) {
+  const base = [
+    normalizeNameId(clientName ?? ""),
+    normalizeNameId(clientEmail ?? ""),
+    normalizeNameId(clientPhone ?? ""),
+  ]
+    .filter(Boolean)
+    .join("-");
+
+  return base || null;
+}
+
+async function upsertCustomerInStorage(
+  db: NonNullable<ReturnType<typeof getDbClient>>,
+  input: {
+    clientName?: string;
+    clientEmail?: string;
+    clientPhone?: string;
+  }
+) {
+  const customerId = buildCustomerId(
+    input.clientName,
+    input.clientEmail,
+    input.clientPhone
+  );
+
+  if (!customerId || !input.clientName?.trim()) {
+    return null;
+  }
+
+  return db.customer.upsert({
+    where: { id: customerId },
+    create: {
+      id: customerId,
+      name: input.clientName.trim(),
+      email: input.clientEmail?.trim() || null,
+      phone: input.clientPhone?.trim() || null,
+    },
+    update: {
+      name: input.clientName.trim(),
+      email: input.clientEmail?.trim() || null,
+      phone: input.clientPhone?.trim() || null,
+    },
+  });
+}
+
 export async function createSaleInStorage(input: CreateSaleInput) {
   const db = getDbClient();
 
@@ -527,6 +582,11 @@ export async function createSaleInStorage(input: CreateSaleInput) {
   const professionalBranchIds = existingProfessional
     ? parseBranchIds(existingProfessional.branchIdsJson, existingProfessional.primaryBranchId)
     : [branch.id];
+  const customer = await upsertCustomerInStorage(db, {
+    clientName: input.clientName,
+    clientEmail: input.clientEmail,
+    clientPhone: input.clientPhone,
+  });
 
   const duplicate = await detectDuplicateSale(
     parsedDate.value,
@@ -608,7 +668,10 @@ export async function createSaleInStorage(input: CreateSaleInput) {
       branchId: branch.id,
       professionalId,
       serviceId,
+      customerId: customer?.id ?? null,
       clientName: input.clientName ?? "Cliente boleta",
+      clientEmail: input.clientEmail?.trim() || null,
+      clientPhone: input.clientPhone?.trim() || null,
       total: input.total,
       commission: input.commission ?? 0,
       profit: input.profit ?? netAmount - (input.commission ?? 0),
@@ -618,6 +681,7 @@ export async function createSaleInStorage(input: CreateSaleInput) {
       branch: true,
       professional: true,
       service: true,
+      customer: true,
     },
   });
 
@@ -643,6 +707,7 @@ export async function updateSaleInStorage(input: UpdateSaleInput) {
       branch: true,
       professional: true,
       service: true,
+      customer: true,
     },
   });
 
@@ -671,6 +736,13 @@ export async function updateSaleInStorage(input: UpdateSaleInput) {
     : [branch.id];
   const serviceName = input.service || existingSale.service.name;
   const serviceId = normalizeNameId(serviceName);
+  const customer = await upsertCustomerInStorage(db, {
+    clientName: input.clientName ?? existingSale.clientName ?? undefined,
+    clientEmail:
+      input.clientEmail ?? existingSale.clientEmail ?? existingSale.customer?.email ?? undefined,
+    clientPhone:
+      input.clientPhone ?? existingSale.clientPhone ?? existingSale.customer?.phone ?? undefined,
+  });
   const parsedDate = parseSafeSaleDate(input.date || formatDate(existingSale.date));
   const total = input.total > 0 ? input.total : existingSale.total;
   const commission = input.commission ?? existingSale.commission;
@@ -748,7 +820,12 @@ export async function updateSaleInStorage(input: UpdateSaleInput) {
       branchId: branch.id,
       professionalId,
       serviceId,
+      customerId: customer?.id ?? null,
       clientName: input.clientName ?? existingSale.clientName ?? "Cliente boleta",
+      clientEmail:
+        input.clientEmail ?? existingSale.clientEmail ?? existingSale.customer?.email ?? null,
+      clientPhone:
+        input.clientPhone ?? existingSale.clientPhone ?? existingSale.customer?.phone ?? null,
       total,
       commission,
       profit,
@@ -758,6 +835,7 @@ export async function updateSaleInStorage(input: UpdateSaleInput) {
       branch: true,
       professional: true,
       service: true,
+      customer: true,
     },
   });
 
@@ -775,6 +853,103 @@ export async function deleteSaleInStorage(input: { id: string }) {
   }
 
   await db.sale.delete({
+    where: { id: input.id },
+  });
+
+  return {
+    deleted: true,
+  };
+}
+
+export async function getCustomersFromStorage() {
+  const db = getDbClient();
+
+  if (!db) {
+    return [];
+  }
+
+  const customerRecords = await db.customer.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  return customerRecords.map(mapCustomer);
+}
+
+export async function createCustomerInStorage(input: {
+  name: string;
+  email?: string;
+  phone?: string;
+}) {
+  const db = getDbClient();
+
+  if (!db) {
+    throw new Error("No hay base de datos disponible para crear el cliente.");
+  }
+
+  const customerId = buildCustomerId(input.name, input.email, input.phone);
+
+  if (!customerId || !input.name.trim()) {
+    throw new Error("Falta nombre del cliente.");
+  }
+
+  const customer = await db.customer.upsert({
+    where: { id: customerId },
+    create: {
+      id: customerId,
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      phone: input.phone?.trim() || null,
+    },
+    update: {
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      phone: input.phone?.trim() || null,
+    },
+  });
+
+  return mapCustomer(customer);
+}
+
+export async function updateCustomerInStorage(input: {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}) {
+  const db = getDbClient();
+
+  if (!db) {
+    throw new Error("No hay base de datos disponible para editar el cliente.");
+  }
+
+  const existingCustomer = await db.customer.findUnique({
+    where: { id: input.id },
+  });
+
+  if (!existingCustomer) {
+    throw new Error("No encontré el cliente que intentas editar.");
+  }
+
+  const customer = await db.customer.update({
+    where: { id: input.id },
+    data: {
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      phone: input.phone?.trim() || null,
+    },
+  });
+
+  return mapCustomer(customer);
+}
+
+export async function deleteCustomerInStorage(input: { id: string }) {
+  const db = getDbClient();
+
+  if (!db) {
+    throw new Error("No hay base de datos disponible para eliminar el cliente.");
+  }
+
+  await db.customer.delete({
     where: { id: input.id },
   });
 
@@ -1111,7 +1286,7 @@ export async function getProfessionalsFromStorage() {
   const db = getDbClient();
 
   if (!db) {
-    return mockProfessionals;
+    return [];
   }
 
   const records = await db.professional.findMany({
@@ -1119,7 +1294,7 @@ export async function getProfessionalsFromStorage() {
   });
 
   if (records.length === 0) {
-    return mockProfessionals;
+    return [];
   }
 
   return records.map(mapProfessional);

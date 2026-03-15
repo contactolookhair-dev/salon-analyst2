@@ -8,9 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "postinstall": "prisma generate --schema src/server/database/prisma/schema.prisma",
-    "db:generate": "prisma generate --schema src/server/database/prisma/schema.prisma",
-    "db:push": "prisma db push --schema src/server/database/prisma/schema.prisma",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
     "db:seed": "node --import tsx src/server/database/seed.ts"
   },
   "dependencies": {

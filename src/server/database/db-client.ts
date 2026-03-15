@@ -49,18 +49,23 @@ export function getDbClient() {
     return null;
   }
 
-  const databaseUrl = process.env.DATABASE_URL as string;
-
-  if (!global.__salonPrismaAdapter) {
-    global.__salonPrismaAdapter = new PrismaBetterSqlite3({
-      url: databaseUrl,
-    });
-  }
-
   if (!global.__salonPrisma) {
-    global.__salonPrisma = new PrismaClient({
-      adapter: global.__salonPrismaAdapter,
-    });
+    const databaseProvider = (process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase();
+    const databaseUrl = process.env.DATABASE_URL as string;
+
+    if (databaseProvider === "postgresql") {
+      global.__salonPrisma = new PrismaClient();
+    } else {
+      if (!global.__salonPrismaAdapter) {
+        global.__salonPrismaAdapter = new PrismaBetterSqlite3({
+          url: databaseUrl,
+        });
+      }
+
+      global.__salonPrisma = new PrismaClient({
+        adapter: global.__salonPrismaAdapter,
+      });
+    }
   }
 
   return global.__salonPrisma;

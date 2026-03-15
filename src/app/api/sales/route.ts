@@ -20,6 +20,8 @@ type LegacySalePayload = {
   service: string;
   total: number;
   clientName?: string;
+  clientEmail?: string;
+  clientPhone?: string;
   commission?: number;
   profit?: number;
   receiptNumber?: string;
@@ -87,6 +89,8 @@ function normalizeLegacyPayload(body: LegacySalePayload | PersistedSalePayloadLi
           }, 0) ||
           0,
         clientName: safeString(body.clientName) || undefined,
+        clientEmail: safeString(body.clientEmail) || undefined,
+        clientPhone: safeString(body.clientPhone) || undefined,
         commission: safeNumber(body.commissionTotal),
         profit: safeNumber(body.profitTotal),
         receiptNumber: safeString(body.receiptNumber) || undefined,
@@ -100,6 +104,8 @@ function normalizeLegacyPayload(body: LegacySalePayload | PersistedSalePayloadLi
         service: safeString(body.service),
         total: safeNumber(body.total),
         clientName: safeString(body.clientName) || undefined,
+        clientEmail: safeString(body.clientEmail) || undefined,
+        clientPhone: safeString(body.clientPhone) || undefined,
         commission: safeNumber(body.commission),
         profit: safeNumber(body.profit),
         receiptNumber: safeString(body.receiptNumber) || undefined,

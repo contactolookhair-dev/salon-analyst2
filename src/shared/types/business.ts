@@ -48,12 +48,24 @@ export type Professional = {
   updatedAt?: string;
 };
 
+export type Customer = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type Sale = {
   id: string;
   branchId: BranchId;
   branch: BranchName;
   professionalId: string;
+  customerId?: string;
   clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
   service: string;
   productName?: string;
   grossAmount: number;
