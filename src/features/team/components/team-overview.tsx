@@ -11,7 +11,10 @@ import {
 
 import { Card } from "@/shared/components/ui/card";
 import { useBranch } from "@/shared/context/branch-context";
-import { notifySaleMutation } from "@/shared/lib/business-snapshot-events";
+import {
+  notifySaleMutation,
+  subscribeSaleMutation,
+} from "@/shared/lib/business-snapshot-events";
 import { formatCurrency } from "@/shared/lib/utils";
 import type { Professional, Sale } from "@/shared/types/business";
 
@@ -84,6 +87,18 @@ function getStartOfMonth(baseDate: string) {
   return `${baseDate.slice(0, 8)}01`;
 }
 
+function getMonthRange(baseDate: string): TeamDateRange {
+  const current = new Date(`${baseDate}T12:00:00.000Z`);
+  const year = current.getUTCFullYear();
+  const month = current.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0, 12, 0, 0));
+
+  return {
+    from: `${baseDate.slice(0, 8)}01`,
+    to: lastDay.toISOString().slice(0, 10),
+  };
+}
+
 function getPreviousMonthRange(baseDate: string): TeamDateRange {
   const current = new Date(`${baseDate}T12:00:00.000Z`);
   const year = current.getUTCFullYear();
@@ -154,6 +169,14 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       // Ignore local storage write issues and keep in-memory range.
     }
   }, [teamDateRange]);
+
+  useEffect(() => {
+    return subscribeSaleMutation((payload) => {
+      if ((payload.action === "created" || payload.action === "updated") && payload.saleDate) {
+        setTeamDateRange(getMonthRange(payload.saleDate));
+      }
+    });
+  }, []);
 
   const teamSalesByProfessional = useMemo<TeamProfessionalEntry[]>(() => {
     return professionals
@@ -401,6 +424,9 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Elige exactamente desde qué fecha hasta qué fecha quieres revisar ventas, comisiones, adelantos y neto a pagar por profesional.
+            </p>
+            <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-olive-700/80">
+              Este bloque es editable: cambia “Fecha desde” y “Fecha hasta” para ver el período que quieras.
             </p>
           </div>
 

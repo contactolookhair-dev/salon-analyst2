@@ -6,6 +6,7 @@ export type SaleMutationPayload = {
   professionalName?: string;
   clientName?: string;
   grossAmount?: number;
+  saleDate?: string;
 };
 
 export function notifyBusinessSnapshotUpdated() {

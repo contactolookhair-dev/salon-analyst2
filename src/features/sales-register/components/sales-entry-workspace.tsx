@@ -496,6 +496,7 @@ export function SalesEntryWorkspace({
         professionalName: selectedProfessional?.name ?? draft.professionalName,
         clientName: draft.clientName,
         grossAmount: grossTotal,
+        saleDate: draft.date,
       });
       setWarnings([payload.message]);
       onRegistered?.();
