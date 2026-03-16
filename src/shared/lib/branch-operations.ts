@@ -79,6 +79,23 @@ export function getDailyFixedExpense(branch: Branch, date: Date) {
     : 0;
 }
 
+export function getDailyLaborCost(
+  monthlySalary: number | null | undefined,
+  branch: Branch,
+  date: Date
+) {
+  if (!monthlySalary || monthlySalary <= 0) {
+    return 0;
+  }
+
+  if (!isBranchOpenOnDate(branch, date)) {
+    return 0;
+  }
+
+  const operatingDays = countOperatingDaysInMonth(branch, date);
+  return operatingDays > 0 ? roundCurrency(monthlySalary / operatingDays) : 0;
+}
+
 export function getDailyExpenseQuota(
   expense: Pick<
     Expense,

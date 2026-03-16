@@ -25,6 +25,7 @@ import { useBusinessSnapshot } from "@/shared/hooks/use-business-snapshot";
 import { notifyBusinessSnapshotUpdated } from "@/shared/lib/business-snapshot-events";
 import {
   countOperatingDaysInMonth,
+  getDailyLaborCost,
   getBranchStatus,
   getDailyExpenseQuota,
 } from "@/shared/lib/branch-operations";
@@ -98,6 +99,13 @@ type PaymentFormState = {
   paymentProofName: string;
   paymentProofDataUrl: string;
   dueDate: string;
+};
+
+type SalaryExpenseView = Expense & {
+  source: "team-salary";
+  professionalId: string;
+  professionalRole: string;
+  paymentMode: "fixed_salary" | "mixed";
 };
 
 const DEFAULT_TIME = "09:00";
@@ -213,14 +221,77 @@ export default function GastosPage() {
   const currentDate = useMemo(() => new Date(`${today}T12:00:00.000Z`), [today]);
 
   const fixedExpenses = useMemo(() => {
-    return snapshot.expenses
+    const persistedFixedExpenses = snapshot.expenses
       .filter((expense) => expense.type === "fixed")
       .map((expense) => ({
         ...expense,
         dailyAmount: getFixedDailyQuota(expense, branchConfigs, currentDate),
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
-  }, [branchConfigs, currentDate, snapshot.expenses]);
+
+    const generatedSalaryExpenses: SalaryExpenseView[] = snapshot.professionals
+      .filter((professional) => {
+        if (!professional.active) {
+          return false;
+        }
+
+        if (
+          professional.paymentMode !== "fixed_salary" &&
+          professional.paymentMode !== "mixed"
+        ) {
+          return false;
+        }
+
+        return (professional.monthlySalary ?? 0) > 0;
+      })
+      .reduce<SalaryExpenseView[]>((accumulator, professional) => {
+        const paymentMode = professional.paymentMode;
+        if (paymentMode !== "fixed_salary" && paymentMode !== "mixed") {
+          return accumulator;
+        }
+
+        const branchId = professional.primaryBranchId ?? professional.branchIds[0];
+        const branchConfig = branchConfigs.find((item) => item.id === branchId);
+
+        if (!branchId || !branchConfig) {
+          return accumulator;
+        }
+
+        const monthlyAmount = professional.monthlySalary ?? 0;
+        const dailyAmount = getDailyLaborCost(monthlyAmount, branchConfig, currentDate);
+
+        accumulator.push({
+          id: `salary-${professional.id}`,
+          branchId,
+          branch: branchConfig.name,
+          title: `Sueldo fijo · ${professional.name}`,
+          type: "fixed" as const,
+          category: "personal",
+          amount: monthlyAmount,
+          monthlyAmount,
+          dailyAmount,
+          active: professional.active,
+          prorationMode: "operating_days" as const,
+          paymentStatus: "pending" as const,
+          balancePending: monthlyAmount,
+          expenseDate: today,
+          createdAt: "00:00",
+          notes:
+            professional.paymentMode === "mixed"
+              ? "Sueldo base generado automáticamente desde Equipo (modalidad mixta)."
+              : "Sueldo fijo generado automáticamente desde Equipo.",
+          source: "team-salary" as const,
+          professionalId: professional.id,
+          professionalRole: professional.primaryRole ?? professional.role,
+          paymentMode,
+        });
+
+        return accumulator;
+      }, [])
+      .sort((left, right) => left.title.localeCompare(right.title));
+
+    return [...generatedSalaryExpenses, ...persistedFixedExpenses];
+  }, [branchConfigs, currentDate, snapshot.expenses, snapshot.professionals, today]);
 
   const variableExpensesToday = useMemo(() => {
     return snapshot.expenses
@@ -602,6 +673,18 @@ export default function GastosPage() {
                       <p className="mt-1 text-sm text-muted-foreground">
                         {expense.branch} · {expense.category}
                       </p>
+                      {"source" in expense && expense.source === "team-salary" ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex rounded-full bg-[#eef4e8] px-3 py-1 text-xs font-semibold text-[#46653d]">
+                            Desde equipo
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {expense.paymentMode === "mixed"
+                              ? `Modalidad mixta · ${expense.professionalRole}`
+                              : `${expense.professionalRole} · sueldo fijo`}
+                          </span>
+                        </div>
+                      ) : null}
                       <p className="mt-2 text-xs text-muted-foreground">
                         {expense.paymentStatus === "paid"
                           ? `Pagado el ${expense.paidDate ?? "-"}`
@@ -667,22 +750,30 @@ export default function GastosPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-start justify-start gap-2 xl:justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openPaymentModal(expense)}
-                          className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
-                          aria-label={`Marcar como pagado ${expense.title}`}
-                        >
-                          <Wallet className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(expense)}
-                          className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
-                          aria-label={`Editar ${expense.title}`}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
+                        {"source" in expense && expense.source === "team-salary" ? (
+                          <div className="rounded-full border border-olive-950/10 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                            Se edita desde Equipo
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openPaymentModal(expense)}
+                              className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
+                              aria-label={`Marcar como pagado ${expense.title}`}
+                            >
+                              <Wallet className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(expense)}
+                              className="rounded-full border border-olive-950/10 p-2 text-olive-700 transition hover:bg-white"
+                              aria-label={`Editar ${expense.title}`}
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

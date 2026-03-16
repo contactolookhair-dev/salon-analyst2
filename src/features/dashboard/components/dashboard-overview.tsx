@@ -127,6 +127,7 @@ export function DashboardOverview() {
     });
   const workerSummaryCards = filteredSnapshot.professionals
     .filter((professional) => professional.active)
+    .filter((professional) => professional.paymentMode !== "fixed_salary")
     .map((professional) => {
       const professionalSales = filteredSnapshot.sales.filter(
         (sale) =>
@@ -139,6 +140,8 @@ export function DashboardOverview() {
         id: professional.id,
         name: professional.name,
         role: professional.role,
+        paymentMode: professional.paymentMode ?? "commission",
+        monthlySalary: professional.monthlySalary ?? 0,
         gross: professionalSales.reduce((sum, sale) => sum + sale.grossAmount, 0),
         net: professionalSales.reduce((sum, sale) => sum + sale.netAmount, 0),
         commission: professionalSales.reduce(
@@ -320,6 +323,11 @@ export function DashboardOverview() {
                   <p className="mt-3 text-lg font-medium text-muted-foreground">
                     {worker.role}
                   </p>
+                  {worker.paymentMode === "mixed" && worker.monthlySalary > 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Sueldo fijo mensual: {formatCurrency(worker.monthlySalary)}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="mt-8 grid gap-4 md:grid-cols-3">

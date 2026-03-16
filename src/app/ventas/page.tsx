@@ -31,7 +31,9 @@ export default function VentasPage() {
         <TeamOverview
           professionals={snapshot.professionals}
           sales={snapshot.sales}
+          advances={snapshot.advances}
           onRegistered={() => void refresh()}
+          initialRangeMode="latest-sales-month"
         />
       </section>
     </section>

@@ -29,7 +29,11 @@ export async function POST(request: Request) {
         branch,
         error: error instanceof Error ? error.message : "unknown_error",
       });
-      snapshot = getBusinessSnapshot(branch);
+      const fallbackSnapshot = getBusinessSnapshot(branch);
+      snapshot = {
+        ...fallbackSnapshot,
+        advances: Array.isArray(fallbackSnapshot.advances) ? fallbackSnapshot.advances : [],
+      };
     }
 
     const { current, predictive } = analyzeBusinessAlerts(snapshot, branch);

@@ -7,7 +7,10 @@ import {
   updateProfessionalInStorage,
 } from "@/server/database/business-repository";
 import { getDbStatus } from "@/server/database/db-client";
-import type { Professional } from "@/shared/types/business";
+import type {
+  Professional,
+  ProfessionalPaymentMode,
+} from "@/shared/types/business";
 
 export const runtime = "nodejs";
 
@@ -41,6 +44,26 @@ function safeBoolean(value: unknown, fallback = true) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function safeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => safeString(item)).filter(Boolean);
+}
+
+function safePaymentMode(value: unknown): ProfessionalPaymentMode {
+  if (
+    value === "fixed_salary" ||
+    value === "mixed" ||
+    value === "partner_draw"
+  ) {
+    return value;
+  }
+
+  return "commission";
+}
+
 function safeBranchIds(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
@@ -59,6 +82,8 @@ function buildProfessionalResponse(body: Record<string, unknown>): Professional 
     id: safeString(body.id) || safeString(body.name).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
     name: safeString(body.name),
     role: safeString(body.role) || "Profesional",
+    primaryRole: safeString(body.primaryRole) || safeString(body.role) || "Profesional",
+    secondaryRoles: safeStringArray(body.secondaryRoles),
     branchIds,
     primaryBranchId:
       body.primaryBranchId === "house-of-hair" ||
@@ -66,6 +91,9 @@ function buildProfessionalResponse(body: Record<string, unknown>): Professional 
         ? body.primaryBranchId
         : branchIds[0] ?? null,
     active: safeBoolean(body.active, true),
+    paymentMode: safePaymentMode(body.paymentMode),
+    monthlySalary: safeNumber(body.monthlySalary) || undefined,
+    commissionsEnabled: safeBoolean(body.commissionsEnabled, true),
     commissionMode:
       body.commissionMode === "percentage" ||
       body.commissionMode === "fixed" ||
@@ -130,6 +158,8 @@ export async function POST(request: Request) {
     const result = await createProfessionalInStorage({
       name: safeString(body.name),
       role: safeString(body.role) || "Profesional",
+      primaryRole: safeString(body.primaryRole) || safeString(body.role) || "Profesional",
+      secondaryRoles: safeStringArray(body.secondaryRoles),
       branchIds,
       primaryBranchId:
         body.primaryBranchId === "house-of-hair" ||
@@ -137,6 +167,9 @@ export async function POST(request: Request) {
           ? body.primaryBranchId
           : branchIds[0] ?? null,
       active: safeBoolean(body.active, true),
+      paymentMode: safePaymentMode(body.paymentMode),
+      monthlySalary: safeNumber(body.monthlySalary) || undefined,
+      commissionsEnabled: safeBoolean(body.commissionsEnabled, true),
       commissionMode:
         body.commissionMode === "percentage" ||
         body.commissionMode === "fixed" ||
@@ -195,6 +228,8 @@ export async function PATCH(request: Request) {
       id: professionalId,
       name: safeString(body.name),
       role: safeString(body.role) || "Profesional",
+      primaryRole: safeString(body.primaryRole) || safeString(body.role) || "Profesional",
+      secondaryRoles: safeStringArray(body.secondaryRoles),
       branchIds,
       primaryBranchId:
         body.primaryBranchId === "house-of-hair" ||
@@ -202,6 +237,9 @@ export async function PATCH(request: Request) {
           ? body.primaryBranchId
           : branchIds[0] ?? null,
       active: safeBoolean(body.active, true),
+      paymentMode: safePaymentMode(body.paymentMode),
+      monthlySalary: safeNumber(body.monthlySalary) || undefined,
+      commissionsEnabled: safeBoolean(body.commissionsEnabled, true),
       commissionMode:
         body.commissionMode === "percentage" ||
         body.commissionMode === "fixed" ||

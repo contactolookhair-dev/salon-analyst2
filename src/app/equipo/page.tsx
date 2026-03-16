@@ -39,6 +39,7 @@ export default function EquipoPage() {
       <TeamOverview
         professionals={snapshot.professionals}
         sales={snapshot.sales}
+        advances={snapshot.advances}
         onRegistered={() => void refresh()}
       />
     </section>

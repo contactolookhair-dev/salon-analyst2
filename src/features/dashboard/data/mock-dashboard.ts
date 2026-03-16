@@ -5,6 +5,7 @@ import {
 } from "@/lib/finance";
 import {
   countOperatingDaysInMonth,
+  getDailyLaborCost,
   getDailyExpenseQuota,
   getDaysInMonth,
   getBranchesForFilter,
@@ -14,6 +15,7 @@ import {
 import { getTodayChileDateString } from "@/shared/lib/safe-date";
 import { filterExpensesByBranch, filterSalesByBranch } from "@/shared/lib/branch";
 import type {
+  Advance,
   Branch,
   BranchFilter,
   Expense,
@@ -26,6 +28,7 @@ export type BusinessSnapshot = {
   sales: Sale[];
   expenses: Expense[];
   professionals: Professional[];
+  advances: Advance[];
 };
 
 export const professionals: Professional[] = [
@@ -195,6 +198,8 @@ export const expenses: Expense[] = [
   },
 ];
 
+export const advances: Advance[] = [];
+
 export function getDashboardDataFromSnapshot(
   snapshot: BusinessSnapshot,
   branch: BranchFilter,
@@ -288,7 +293,70 @@ export function getDashboardDataFromSnapshot(
     },
     []
   );
-  const branchExpenses = [...variableExpenses, ...fixedExpenseItems, ...fixedFallbackItems];
+  const salaryExpenseItems = snapshot.professionals.reduce<Expense[]>((items, professional) => {
+    if (!professional.active) {
+      return items;
+    }
+
+    if (
+      professional.paymentMode !== "fixed_salary" &&
+      professional.paymentMode !== "mixed"
+    ) {
+      return items;
+    }
+
+    const monthlySalary = professional.monthlySalary ?? 0;
+    if (monthlySalary <= 0) {
+      return items;
+    }
+
+    const branchId = professional.primaryBranchId ?? professional.branchIds[0];
+    if (!branchId) {
+      return items;
+    }
+
+    const branchConfig = branchConfigs.find((item) => item.id === branchId);
+    if (!branchConfig) {
+      return items;
+    }
+
+    const dailyAmount = getDailyLaborCost(monthlySalary, branchConfig, currentDate);
+    if (dailyAmount <= 0) {
+      return items;
+    }
+
+    items.push({
+      id: `salary-${professional.id}-${today}`,
+      branchId,
+      branch: branchConfig.name,
+      title: `Prorrateo sueldo fijo · ${professional.name}`,
+      type: "fixed",
+      active: true,
+      category:
+        professional.paymentMode === "mixed"
+          ? "Personal · mixto"
+          : "Personal · sueldo fijo",
+      amount: dailyAmount,
+      monthlyAmount: monthlySalary,
+      dailyAmount,
+      prorationMode: "operating_days",
+      paymentStatus: "pending",
+      expenseDate: today,
+      createdAt: "00:00",
+      notes:
+        professional.paymentMode === "mixed"
+          ? "Prorrateo diario del sueldo base del personal mixto."
+          : "Prorrateo diario del sueldo fijo mensual.",
+    });
+
+    return items;
+  }, []);
+  const branchExpenses = [
+    ...variableExpenses,
+    ...fixedExpenseItems,
+    ...fixedFallbackItems,
+    ...salaryExpenseItems,
+  ];
   const branchProfessionals = snapshot.professionals;
   const financialSummary = calcularUtilidadDia(branchSales, branchExpenses);
   const professionalTotals = calcularVentasPorProfesional(branchSales);
@@ -316,6 +384,21 @@ export function getDashboardDataFromSnapshot(
     (sum, item) => sum + item.monthlyTarget,
     0
   );
+  const configuredMonthlyFixedExpenses = configuredFixedExpenses.reduce(
+    (sum, item) => sum + (item.monthlyAmount ?? item.amount),
+    0
+  );
+  const monthlySalaryCommitments = snapshot.professionals.reduce((sum, professional) => {
+    if (
+      !professional.active ||
+      (professional.paymentMode !== "fixed_salary" &&
+        professional.paymentMode !== "mixed")
+    ) {
+      return sum;
+    }
+
+    return sum + (professional.monthlySalary ?? 0);
+  }, 0);
 
   const salesByProfessional = branchProfessionals.map((professional) => {
     const professionalSales = branchSales.filter(
@@ -351,16 +434,15 @@ export function getDashboardDataFromSnapshot(
       isClosedToday,
       commercialTargetApplies,
       today,
-      fixedExpensesToday: [...fixedExpenseItems, ...fixedFallbackItems].reduce(
+      fixedExpensesToday: [...fixedExpenseItems, ...fixedFallbackItems, ...salaryExpenseItems].reduce(
         (sum, item) => sum + item.amount,
         0
       ),
       recurringExpensesToday: 0,
-      monthlyFixedExpenses: configuredFixedExpenses.reduce(
-        (sum, item) => sum + (item.monthlyAmount ?? item.amount),
-        0
-      ) ||
-        activeBranches.reduce((sum, item) => sum + item.fixedMonthlyExpenses, 0),
+      monthlyFixedExpenses:
+        configuredMonthlyFixedExpenses > 0 || monthlySalaryCommitments > 0
+          ? configuredMonthlyFixedExpenses + monthlySalaryCommitments
+          : activeBranches.reduce((sum, item) => sum + item.fixedMonthlyExpenses, 0),
       accountingResult: financialSummary.utilidad,
       commercialStatusLabel: isClosedToday
         ? "Meta comercial no aplica"
@@ -378,6 +460,7 @@ export function getBusinessSnapshot(branch: BranchFilter) {
     branch,
     sales: filterSalesByBranch(sales, branch),
     expenses: filterExpensesByBranch(expenses, branch),
+    advances: branch === "all" ? advances : advances.filter((advance) => advance.branchId === branch),
     professionals:
       branch === "all"
         ? professionals

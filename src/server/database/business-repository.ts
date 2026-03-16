@@ -1,4 +1,6 @@
 import type {
+  Advance as PrismaAdvance,
+  AdvanceType as PrismaAdvanceType,
   CommissionType as PrismaCommissionType,
   Customer as PrismaCustomer,
   Expense as PrismaExpense,
@@ -6,6 +8,7 @@ import type {
   ExpenseType as PrismaExpenseType,
   PaymentStatus as PrismaPaymentStatus,
   ProfessionalCommissionMode as PrismaProfessionalCommissionMode,
+  ProfessionalPaymentMode as PrismaProfessionalPaymentMode,
   Professional as PrismaProfessional,
   Sale as PrismaSale,
   Service as PrismaService,
@@ -21,6 +24,8 @@ import { getDbClient } from "@/server/database/db-client";
 import { getBranchName } from "@/shared/lib/branch";
 import { parseSafeDateTime, parseSafeSaleDate } from "@/shared/lib/safe-date";
 import type {
+  Advance,
+  AdvanceType,
   BranchFilter,
   BranchId,
   Customer,
@@ -30,6 +35,7 @@ import type {
   PaymentStatus,
   Professional,
   ProfessionalCommissionMode,
+  ProfessionalPaymentMode,
   Sale,
 } from "@/shared/types/business";
 
@@ -41,6 +47,10 @@ type SaleRecord = PrismaSale & {
 };
 
 type ExpenseRecord = PrismaExpense & {
+  branch: PrismaBranch;
+};
+
+type AdvanceRecord = PrismaAdvance & {
   branch: PrismaBranch;
 };
 
@@ -202,8 +212,60 @@ function mapProfessionalCommissionMode(
   return "system_rules";
 }
 
+function mapProfessionalPaymentMode(
+  value: PrismaProfessionalPaymentMode
+): ProfessionalPaymentMode {
+  if (value === "FIXED_SALARY") {
+    return "fixed_salary";
+  }
+
+  if (value === "MIXED") {
+    return "mixed";
+  }
+
+  if (value === "PARTNER_DRAW") {
+    return "partner_draw";
+  }
+
+  return "commission";
+}
+
+function mapAdvanceType(value: PrismaAdvanceType): AdvanceType {
+  if (value === "PARTNER_WITHDRAWAL") {
+    return "partner_withdrawal";
+  }
+
+  if (value === "OTHER_DISCOUNT") {
+    return "other_discount";
+  }
+
+  return "advance";
+}
+
 function serializeBranchIds(branchIds: BranchId[]) {
   return JSON.stringify(Array.from(new Set(branchIds)));
+}
+
+function serializeStringArray(values: string[]) {
+  return JSON.stringify(
+    Array.from(
+      new Set(values.map((value) => value.trim()).filter(Boolean))
+    )
+  );
+}
+
+function parseStringArray(value: string) {
+  try {
+    const parsed = JSON.parse(value) as string[];
+
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean);
+    }
+  } catch {
+    // Ignore malformed JSON and fallback below.
+  }
+
+  return [];
 }
 
 function parseBranchIds(value: string, fallbackBranchId?: string | null): BranchId[] {
@@ -290,12 +352,17 @@ function mapProfessional(record: PrismaProfessional): Professional {
     name: record.name,
     branchIds: parseBranchIds(record.branchIdsJson, record.primaryBranchId),
     role: record.role ?? "Profesional",
+    primaryRole: record.primaryRole ?? record.role ?? "Profesional",
+    secondaryRoles: parseStringArray(record.secondaryRolesJson),
     primaryBranchId:
       record.primaryBranchId === "house-of-hair" ||
       record.primaryBranchId === "look-hair-extensions"
         ? (record.primaryBranchId as BranchId)
         : null,
     active: record.active,
+    paymentMode: mapProfessionalPaymentMode(record.paymentMode),
+    monthlySalary: record.monthlySalary ?? undefined,
+    commissionsEnabled: record.commissionsEnabled,
     commissionMode: mapProfessionalCommissionMode(record.commissionMode),
     commissionValue: record.commissionValue ?? undefined,
     phone: record.phone ?? undefined,
@@ -304,6 +371,22 @@ function mapProfessional(record: PrismaProfessional): Professional {
     documentId: record.documentId ?? undefined,
     notes: record.notes ?? undefined,
     avatarColor: record.avatarColor ?? undefined,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapAdvance(record: AdvanceRecord): Advance {
+  return {
+    id: record.id,
+    personId:
+      record.personId,
+    amount: record.amount,
+    date: formatDate(record.date),
+    branchId: record.branchId as BranchId,
+    branch: record.branch.name as Advance["branch"],
+    note: record.note ?? undefined,
+    type: mapAdvanceType(record.type),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -318,7 +401,7 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
 
   const where = branch === "all" ? {} : { branchId: branch };
 
-  const [saleRecords, expenseRecords, professionalRecords] = await Promise.all([
+  const [saleRecords, expenseRecords, professionalRecords, advanceRecords] = await Promise.all([
     db.sale.findMany({
       where,
       include: {
@@ -339,6 +422,13 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
     db.professional.findMany({
       orderBy: { name: "asc" },
     }),
+    db.advance.findMany({
+      where,
+      include: {
+        branch: true,
+      },
+      orderBy: { date: "asc" },
+    }),
   ]);
 
   const mappedProfessionals = professionalRecords
@@ -352,6 +442,7 @@ async function loadSnapshotFromDatabase(branch: BranchFilter) {
     sales: saleRecords.map(mapSale),
     expenses: expenseRecords.map(mapExpense),
     professionals: mappedProfessionals,
+    advances: advanceRecords.map(mapAdvance),
   };
 }
 
@@ -367,6 +458,7 @@ export async function getBusinessSnapshotFromStorage(branch: BranchFilter) {
     sales: [],
     expenses: [],
     professionals: [],
+    advances: [],
   };
 }
 
@@ -1304,9 +1396,14 @@ type SaveProfessionalInput = {
   id?: string;
   name: string;
   role: string;
+  primaryRole?: string;
+  secondaryRoles?: string[];
   branchIds: BranchId[];
   primaryBranchId?: BranchId | null;
   active: boolean;
+  paymentMode?: ProfessionalPaymentMode;
+  monthlySalary?: number;
+  commissionsEnabled?: boolean;
   commissionMode: ProfessionalCommissionMode;
   commissionValue?: number;
   phone?: string;
@@ -1343,9 +1440,21 @@ export async function createProfessionalInStorage(input: SaveProfessionalInput) 
       id: input.id?.trim() || normalizeNameId(input.name),
       name: input.name.trim(),
       role: input.role.trim() || "Profesional",
+      primaryRole: input.primaryRole?.trim() || input.role.trim() || "Profesional",
+      secondaryRolesJson: serializeStringArray(input.secondaryRoles ?? []),
       primaryBranchId: input.primaryBranchId ?? input.branchIds[0] ?? null,
       branchIdsJson: serializeBranchIds(input.branchIds),
       active: input.active,
+      paymentMode:
+        input.paymentMode === "fixed_salary"
+          ? "FIXED_SALARY"
+          : input.paymentMode === "mixed"
+            ? "MIXED"
+            : input.paymentMode === "partner_draw"
+              ? "PARTNER_DRAW"
+              : "COMMISSION",
+      monthlySalary: input.monthlySalary ?? null,
+      commissionsEnabled: input.commissionsEnabled ?? true,
       commissionMode:
         input.commissionMode === "percentage"
           ? "PERCENTAGE"
@@ -1399,9 +1508,21 @@ export async function updateProfessionalInStorage(input: SaveProfessionalInput &
     data: {
       name: input.name.trim(),
       role: input.role.trim() || "Profesional",
+      primaryRole: input.primaryRole?.trim() || input.role.trim() || "Profesional",
+      secondaryRolesJson: serializeStringArray(input.secondaryRoles ?? []),
       primaryBranchId: input.primaryBranchId ?? input.branchIds[0] ?? null,
       branchIdsJson: serializeBranchIds(input.branchIds),
       active: input.active,
+      paymentMode:
+        input.paymentMode === "fixed_salary"
+          ? "FIXED_SALARY"
+          : input.paymentMode === "mixed"
+            ? "MIXED"
+            : input.paymentMode === "partner_draw"
+              ? "PARTNER_DRAW"
+              : "COMMISSION",
+      monthlySalary: input.monthlySalary ?? null,
+      commissionsEnabled: input.commissionsEnabled ?? true,
       commissionMode:
         input.commissionMode === "percentage"
           ? "PERCENTAGE"
@@ -1450,6 +1571,132 @@ export async function deleteProfessionalInStorage(input: { id: string }) {
     deleted: false,
     deactivated: true,
     professional: mapProfessional(professional),
+  };
+}
+
+type SaveAdvanceInput = {
+  id?: string;
+  personId: string;
+  amount: number;
+  date: string;
+  branchId: BranchId;
+  note?: string;
+  type: AdvanceType;
+};
+
+export async function getAdvancesFromStorage() {
+  const db = getDbClient();
+
+  if (!db) {
+    return [];
+  }
+
+  const records = await db.advance.findMany({
+    include: {
+      branch: true,
+    },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+  });
+
+  return records.map(mapAdvance);
+}
+
+export async function createAdvanceInStorage(input: SaveAdvanceInput) {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+    };
+  }
+
+  await ensureBranchIdsExist([input.branchId]);
+
+  const record = await db.advance.create({
+    data: {
+      id: input.id?.trim() || crypto.randomUUID(),
+      personId: input.personId,
+      amount: input.amount,
+      date: parseSafeDateTime(input.date, "12:00").value,
+      branchId: input.branchId,
+      note: input.note?.trim() || null,
+      type:
+        input.type === "partner_withdrawal"
+          ? "PARTNER_WITHDRAWAL"
+          : input.type === "other_discount"
+            ? "OTHER_DISCOUNT"
+            : "ADVANCE",
+    },
+    include: {
+      branch: true,
+    },
+  });
+
+  return {
+    stored: true,
+    fallback: false,
+    advance: mapAdvance(record),
+  };
+}
+
+export async function updateAdvanceInStorage(input: SaveAdvanceInput & { id: string }) {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+    };
+  }
+
+  await ensureBranchIdsExist([input.branchId]);
+
+  const record = await db.advance.update({
+    where: { id: input.id },
+    data: {
+      personId: input.personId,
+      amount: input.amount,
+      date: parseSafeDateTime(input.date, "12:00").value,
+      branchId: input.branchId,
+      note: input.note?.trim() || null,
+      type:
+        input.type === "partner_withdrawal"
+          ? "PARTNER_WITHDRAWAL"
+          : input.type === "other_discount"
+            ? "OTHER_DISCOUNT"
+            : "ADVANCE",
+    },
+    include: {
+      branch: true,
+    },
+  });
+
+  return {
+    stored: true,
+    fallback: false,
+    advance: mapAdvance(record),
+  };
+}
+
+export async function deleteAdvanceInStorage(input: { id: string }) {
+  const db = getDbClient();
+
+  if (!db) {
+    return {
+      stored: false,
+      fallback: true,
+    };
+  }
+
+  await db.advance.delete({
+    where: { id: input.id },
+  });
+
+  return {
+    stored: true,
+    fallback: false,
+    deleted: true,
   };
 }
 

@@ -4,26 +4,35 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Pencil,
+  Plus,
   Save,
   Trash2,
   X,
 } from "lucide-react";
 
+import { branches } from "@/features/branches/data/mock-branches";
 import { Card } from "@/shared/components/ui/card";
 import { useBranch } from "@/shared/context/branch-context";
+import {
+  countOperatingDaysInMonth,
+  getBranchById,
+  isBranchOpenOnDate,
+} from "@/shared/lib/branch-operations";
 import {
   notifySaleMutation,
   subscribeSaleMutation,
 } from "@/shared/lib/business-snapshot-events";
 import { formatCurrency } from "@/shared/lib/utils";
-import type { Professional, Sale } from "@/shared/types/business";
+import type { Advance, Professional, Sale } from "@/shared/types/business";
 
 const TEAM_DATE_RANGE_STORAGE_KEY = "salon-analyst2-team-date-range";
 
 type TeamOverviewProps = {
   professionals: Professional[];
   sales: Sale[];
+  advances?: Advance[];
   onRegistered?: () => void;
+  initialRangeMode?: "persisted" | "latest-sales-month";
 };
 
 type TeamDateRange = {
@@ -40,6 +49,9 @@ type TeamProfessionalEntry = {
   grossTotal: number;
   netTotal: number;
   commissionTotal: number;
+  advancesTotal: number;
+  accruedSalary: number;
+  netPayTotal: number;
 };
 
 type EditableSaleState = {
@@ -52,6 +64,15 @@ type EditableSaleState = {
   service: string;
   grossAmount: number;
   commissionValue: number;
+};
+
+type AdvanceFormState = {
+  personId: string;
+  amount: number;
+  date: string;
+  branchId: string;
+  type: Advance["type"];
+  note: string;
 };
 
 function formatDateLabel(value: string) {
@@ -118,6 +139,10 @@ function isSaleInRange(saleDate: string, range: TeamDateRange) {
   return saleDate >= range.from && saleDate <= range.to;
 }
 
+function isDateInRange(dateValue: string, range: TeamDateRange) {
+  return dateValue >= range.from && dateValue <= range.to;
+}
+
 function getDefaultTeamDateRange(today: string): TeamDateRange {
   return {
     from: getStartOfMonth(today),
@@ -125,7 +150,13 @@ function getDefaultTeamDateRange(today: string): TeamDateRange {
   };
 }
 
-export function TeamOverview({ professionals, sales, onRegistered }: TeamOverviewProps) {
+export function TeamOverview({
+  professionals,
+  sales,
+  advances = [],
+  onRegistered,
+  initialRangeMode = "persisted",
+}: TeamOverviewProps) {
   const { branch: selectedBranch } = useBranch();
   const today = useMemo(() => getTodayChileDateString(), []);
   const [teamDateRange, setTeamDateRange] = useState<TeamDateRange>(() =>
@@ -137,8 +168,52 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
   const [salesProfessionalFilter, setSalesProfessionalFilter] = useState<"all" | string>("all");
   const [salesDateSortOrder, setSalesDateSortOrder] =
     useState<SalesDateSortOrder>("date_desc");
+  const [advanceForm, setAdvanceForm] = useState<AdvanceFormState>({
+    personId: "",
+    amount: 0,
+    date: today,
+    branchId: selectedBranch === "all" ? "" : selectedBranch,
+    type: "advance",
+    note: "",
+  });
+  const [isSavingAdvance, setIsSavingAdvance] = useState(false);
+  const [advanceActionError, setAdvanceActionError] = useState<string | null>(null);
+
+  const selectedAdvanceProfessional = useMemo(
+    () => professionals.find((professional) => professional.id === advanceForm.personId) ?? null,
+    [professionals, advanceForm.personId]
+  );
+
+  const latestRelevantSaleDate = useMemo(() => {
+    const relevantSales = sales.filter((sale) =>
+      selectedBranch === "all" ? true : sale.branchId === selectedBranch
+    );
+
+    if (relevantSales.length === 0) {
+      return null;
+    }
+
+    return [...relevantSales]
+      .sort((left, right) =>
+        `${right.saleDate}T${right.createdAt}`.localeCompare(
+          `${left.saleDate}T${left.createdAt}`
+        )
+      )[0]?.saleDate ?? null;
+  }, [sales, selectedBranch]);
 
   useEffect(() => {
+    if (initialRangeMode === "latest-sales-month") {
+      if (latestRelevantSaleDate) {
+        setTeamDateRange((current) => {
+          const nextRange = getMonthRange(latestRelevantSaleDate);
+          return current.from === nextRange.from && current.to === nextRange.to
+            ? current
+            : nextRange;
+        });
+      }
+      return;
+    }
+
     try {
       const storedValue = window.localStorage.getItem(TEAM_DATE_RANGE_STORAGE_KEY);
 
@@ -149,15 +224,16 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       const parsedValue = JSON.parse(storedValue) as Partial<TeamDateRange>;
 
       if (parsedValue.from && parsedValue.to) {
-        setTeamDateRange({
+        const nextRange = {
           from: parsedValue.from,
           to: parsedValue.to,
-        });
+        };
+        setTeamDateRange(nextRange);
       }
     } catch {
-      // Ignore local storage parse issues and keep default range.
+      // Ignore malformed stored ranges and keep the in-memory default.
     }
-  }, []);
+  }, [initialRangeMode, latestRelevantSaleDate, sales, selectedBranch]);
 
   useEffect(() => {
     try {
@@ -169,6 +245,52 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       // Ignore local storage write issues and keep in-memory range.
     }
   }, [teamDateRange]);
+
+  useEffect(() => {
+    setAdvanceForm((current) => ({
+      ...current,
+      branchId: selectedBranch === "all" ? current.branchId : selectedBranch,
+    }));
+  }, [selectedBranch]);
+
+  useEffect(() => {
+    if (!selectedAdvanceProfessional) {
+      return;
+    }
+
+    setAdvanceForm((current) => {
+      const nextBranchId =
+        current.branchId ||
+        (selectedBranch === "all"
+          ? selectedAdvanceProfessional.primaryBranchId ?? current.branchId
+          : current.branchId);
+
+      if (selectedAdvanceProfessional.paymentMode === "partner_draw") {
+        if (
+          current.type === "partner_withdrawal" &&
+          current.branchId === nextBranchId
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          type: "partner_withdrawal",
+          branchId: nextBranchId,
+        };
+      }
+
+      if (current.type !== "partner_withdrawal" && current.branchId === nextBranchId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        type: current.type === "partner_withdrawal" ? "advance" : current.type,
+        branchId: nextBranchId,
+      };
+    });
+  }, [selectedAdvanceProfessional, selectedBranch]);
 
   useEffect(() => {
     return subscribeSaleMutation((payload) => {
@@ -205,10 +327,54 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
             0
           );
           const netTotal = professionalSales.reduce((total, sale) => total + sale.netAmount, 0);
-          const commissionTotal = professionalSales.reduce(
+          const baseCommissionTotal = professionalSales.reduce(
             (total, sale) => total + sale.commissionValue,
             0
           );
+          const commissionTotal =
+            professional.commissionsEnabled === false ? 0 : baseCommissionTotal;
+          const advancesTotal = advances
+            .filter(
+              (advance) =>
+                advance.personId === professional.id &&
+                advance.branchId === branchId &&
+                isDateInRange(advance.date, teamDateRange)
+            )
+            .reduce((total, advance) => total + advance.amount, 0);
+
+          let accruedSalary = 0;
+          const monthlySalary =
+            professional.paymentMode === "fixed_salary" || professional.paymentMode === "mixed"
+              ? professional.monthlySalary ?? 0
+              : 0;
+          const branch = getBranchById(branchId, branches);
+
+          if (branch && monthlySalary > 0) {
+            let cursor = new Date(`${teamDateRange.from}T12:00:00.000Z`);
+            const end = new Date(`${teamDateRange.to}T12:00:00.000Z`);
+
+            while (cursor.getTime() <= end.getTime()) {
+              if (isBranchOpenOnDate(branch, cursor)) {
+                const operatingDays = countOperatingDaysInMonth(branch, cursor);
+
+                if (operatingDays > 0) {
+                  accruedSalary += monthlySalary / operatingDays;
+                }
+              }
+
+              cursor.setUTCDate(cursor.getUTCDate() + 1);
+            }
+          }
+
+          let netPayTotal = commissionTotal - advancesTotal;
+
+          if (professional.paymentMode === "fixed_salary") {
+            netPayTotal = accruedSalary - advancesTotal;
+          } else if (professional.paymentMode === "mixed") {
+            netPayTotal = accruedSalary + commissionTotal - advancesTotal;
+          } else if (professional.paymentMode === "partner_draw") {
+            netPayTotal = -advancesTotal;
+          }
 
           return {
             key: `${professional.id}-${branchId}`,
@@ -217,11 +383,14 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
             grossTotal,
             netTotal,
             commissionTotal,
+            advancesTotal,
+            accruedSalary: Math.round(accruedSalary),
+            netPayTotal: Math.round(netPayTotal),
           };
         });
       })
       .filter((entry) => entry.professional.active || entry.sales.length > 0);
-  }, [professionals, sales, selectedBranch, teamDateRange]);
+  }, [advances, professionals, sales, selectedBranch, teamDateRange]);
 
   const salesInRange = useMemo(() => {
     return sales
@@ -285,6 +454,16 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       }
     );
   }, [visibleSalesInRange]);
+
+  const visibleAdvances = useMemo(() => {
+    return advances
+      .filter(
+        (advance) =>
+          isDateInRange(advance.date, teamDateRange) &&
+          (selectedBranch === "all" || advance.branchId === selectedBranch)
+      )
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [advances, selectedBranch, teamDateRange]);
 
   function getSaleDetailLabel(sale: Sale) {
     if (sale.productName && sale.productName !== sale.service) {
@@ -399,6 +578,7 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
         professionalName: editingSale.professionalName,
         clientName: editingSale.clientName,
         grossAmount: editingSale.grossAmount,
+        saleDate: editingSale.date,
       });
       setEditingSale(null);
       onRegistered?.();
@@ -408,6 +588,75 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
       );
     } finally {
       setIsSavingSale(false);
+    }
+  }
+
+  async function handleCreateAdvance() {
+    if (!advanceForm.personId || !advanceForm.branchId || advanceForm.amount <= 0) {
+      setAdvanceActionError("Completa persona, sucursal y monto para registrar el movimiento.");
+      return;
+    }
+
+    try {
+      setIsSavingAdvance(true);
+      setAdvanceActionError(null);
+      const response = await fetch("/api/advances", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(advanceForm),
+      });
+      const payload = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || "No se pudo registrar el movimiento.");
+      }
+
+      setAdvanceForm({
+        personId: "",
+        amount: 0,
+        date: today,
+        branchId: selectedBranch === "all" ? "" : selectedBranch,
+        type: "advance",
+        note: "",
+      });
+      onRegistered?.();
+    } catch (error) {
+      setAdvanceActionError(
+        error instanceof Error ? error.message : "No se pudo registrar el movimiento."
+      );
+    } finally {
+      setIsSavingAdvance(false);
+    }
+  }
+
+  async function handleDeleteAdvance(advance: Advance) {
+    const confirmed = window.confirm("¿Eliminar este movimiento?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsSavingAdvance(true);
+      setAdvanceActionError(null);
+      const response = await fetch(`/api/advances?id=${encodeURIComponent(advance.id)}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || "No se pudo eliminar el movimiento.");
+      }
+
+      onRegistered?.();
+    } catch (error) {
+      setAdvanceActionError(
+        error instanceof Error ? error.message : "No se pudo eliminar el movimiento."
+      );
+    } finally {
+      setIsSavingAdvance(false);
     }
   }
 
@@ -544,6 +793,9 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
               grossTotal,
               netTotal,
               commissionTotal,
+              advancesTotal,
+              accruedSalary,
+              netPayTotal,
             } = entry;
 
             return (
@@ -586,11 +838,214 @@ export function TeamOverview({ professionals, sales, onRegistered }: TeamOvervie
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-[20px] bg-white/92 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Sueldo proporcional
+                    </p>
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.2rem,1.5vw,1.55rem)] font-semibold leading-none text-olive-950">
+                      {formatCurrency(accruedSalary)}
+                    </p>
+                  </div>
+                  <div className="rounded-[20px] bg-white/92 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Adelantos
+                    </p>
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.2rem,1.5vw,1.55rem)] font-semibold leading-none text-olive-950">
+                      {formatCurrency(advancesTotal)}
+                    </p>
+                  </div>
+                  <div className="rounded-[20px] bg-white/92 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Neto a pagar
+                    </p>
+                    <p className="mt-3 whitespace-nowrap text-[clamp(1.2rem,1.5vw,1.55rem)] font-semibold leading-none text-olive-950">
+                      {formatCurrency(netPayTotal)}
+                    </p>
+                  </div>
+                </div>
               </div>
             );
           }
         )}
       </div>
+
+      <Card className="space-y-5">
+        <div>
+          <p className="text-sm uppercase tracking-[0.18em] text-olive-700">
+            Movimientos
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold text-olive-950">
+            Adelantos y retiros
+          </h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Registra adelantos, retiros de socio u otros descuentos para cualquier persona del equipo.
+          </p>
+        </div>
+
+        {advanceActionError ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {advanceActionError}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr_0.9fr_1fr]">
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Persona</span>
+            <select
+              value={advanceForm.personId}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({ ...current, personId: event.target.value }))
+              }
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+            >
+              <option value="">Selecciona persona</option>
+              {professionals.map((professional) => (
+                <option key={`advance-person-${professional.id}`} value={professional.id}>
+                  {professional.name}
+                  {professional.paymentMode === "partner_draw" ? " · Socio" : ""}
+                </option>
+              ))}
+            </select>
+            {selectedAdvanceProfessional?.paymentMode === "partner_draw" ? (
+              <p className="text-xs text-muted-foreground">
+                Este movimiento se registrará como retiro de socio.
+              </p>
+            ) : null}
+          </label>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Monto</span>
+            <input
+              type="number"
+              min={0}
+              value={advanceForm.amount || ""}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({
+                  ...current,
+                  amount: Number(event.target.value) || 0,
+                }))
+              }
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+            />
+          </label>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Fecha</span>
+            <input
+              type="date"
+              value={advanceForm.date}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({ ...current, date: event.target.value }))
+              }
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+            />
+          </label>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Sucursal</span>
+            <select
+              value={advanceForm.branchId}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({ ...current, branchId: event.target.value }))
+              }
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+            >
+              <option value="">Selecciona sucursal</option>
+              {branches.map((branch) => (
+                <option key={`advance-branch-${branch.id}`} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-[0.9fr_1.4fr_auto]">
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Tipo</span>
+            <select
+              value={advanceForm.type}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({
+                  ...current,
+                  type: event.target.value as Advance["type"],
+                }))
+              }
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3 text-olive-950"
+            >
+              <option value="advance">Adelanto</option>
+              <option value="partner_withdrawal">Retiro de socio</option>
+              <option value="other_discount">Otro descuento</option>
+            </select>
+          </label>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-olive-950">Nota</span>
+            <input
+              value={advanceForm.note}
+              onChange={(event) =>
+                setAdvanceForm((current) => ({ ...current, note: event.target.value }))
+              }
+              placeholder="Observación opcional"
+              className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => void handleCreateAdvance()}
+              disabled={isSavingAdvance}
+              className="inline-flex items-center gap-2 rounded-full bg-olive-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <Plus className="size-4" />
+              {isSavingAdvance ? "Guardando..." : "Registrar movimiento"}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {visibleAdvances.length ? (
+            visibleAdvances.map((advance) => {
+              const professional =
+                professionals.find((item) => item.id === advance.personId) ?? null;
+
+              return (
+                <div
+                  key={advance.id}
+                  className="flex flex-col gap-3 rounded-[20px] border border-olive-950/8 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="font-semibold text-olive-950">
+                      {professional?.name ?? advance.personId}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {formatDateLabel(advance.date)} · {advance.branch}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {advance.type} {advance.note ? `· ${advance.note}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-lg font-semibold text-olive-950">
+                      {formatCurrency(advance.amount)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteAdvance(advance)}
+                      className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700"
+                    >
+                      <Trash2 className="size-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="rounded-[20px] border border-dashed border-olive-950/10 bg-[#fbfaf6] px-4 py-5 text-sm text-muted-foreground">
+              Aún no hay adelantos ni retiros registrados en el rango seleccionado.
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

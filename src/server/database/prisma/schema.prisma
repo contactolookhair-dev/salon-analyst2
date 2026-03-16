@@ -15,15 +15,21 @@ model Branch {
   primaryProfessionals Professional[] @relation("ProfessionalPrimaryBranch")
   sales                Sale[]
   expenses             Expense[]
+  advances             Advance[]
 }
 
 model Professional {
   id              String                     @id
   name            String
   role            String?
+  primaryRole     String?
+  secondaryRolesJson String                  @default("[]")
   primaryBranchId String?
   branchIdsJson   String                     @default("[]")
   active          Boolean                    @default(true)
+  paymentMode     ProfessionalPaymentMode    @default(COMMISSION)
+  monthlySalary   Int?
+  commissionsEnabled Boolean                 @default(true)
   commissionMode  ProfessionalCommissionMode @default(SYSTEM_RULES)
   commissionValue Int?
   phone           String?
@@ -36,8 +42,27 @@ model Professional {
   updatedAt       DateTime                   @default(now()) @updatedAt
   primaryBranch   Branch?                    @relation("ProfessionalPrimaryBranch", fields: [primaryBranchId], references: [id], onDelete: SetNull)
   sales           Sale[]
+  advances        Advance[]
 
   @@index([primaryBranchId])
+}
+
+model Advance {
+  id             String      @id
+  personId       String
+  amount         Int
+  date           DateTime
+  branchId       String
+  note           String?
+  type           AdvanceType @default(ADVANCE)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @default(now()) @updatedAt
+  professional   Professional @relation(fields: [personId], references: [id], onDelete: Cascade)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([branchId])
+  @@index([date])
 }
 
 model Customer {
@@ -172,4 +197,17 @@ enum ProfessionalCommissionMode {
   FIXED
   MIXED
   NONE
+}
+
+enum ProfessionalPaymentMode {
+  COMMISSION
+  FIXED_SALARY
+  MIXED
+  PARTNER_DRAW
+}
+
+enum AdvanceType {
+  ADVANCE
+  PARTNER_WITHDRAWAL
+  OTHER_DISCOUNT
 }

@@ -28,14 +28,25 @@ export type ProfessionalCommissionMode =
   | "fixed"
   | "mixed"
   | "none";
+export type ProfessionalPaymentMode =
+  | "commission"
+  | "fixed_salary"
+  | "mixed"
+  | "partner_draw";
+export type AdvanceType = "advance" | "partner_withdrawal" | "other_discount";
 
 export type Professional = {
   id: string;
   name: string;
   branchIds: BranchId[];
   role: string;
+  primaryRole?: string;
+  secondaryRoles?: string[];
   primaryBranchId?: BranchId | null;
   active: boolean;
+  paymentMode?: ProfessionalPaymentMode;
+  monthlySalary?: number;
+  commissionsEnabled?: boolean;
   commissionMode: ProfessionalCommissionMode;
   commissionValue?: number;
   phone?: string;
@@ -44,6 +55,19 @@ export type Professional = {
   documentId?: string;
   notes?: string;
   avatarColor?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type Advance = {
+  id: string;
+  personId: string;
+  amount: number;
+  date: string;
+  branchId: BranchId;
+  branch: BranchName;
+  note?: string;
+  type: AdvanceType;
   createdAt?: string;
   updatedAt?: string;
 };

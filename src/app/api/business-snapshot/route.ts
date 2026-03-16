@@ -19,6 +19,7 @@ function createEmptySnapshot(branch: BranchFilter) {
     sales: [],
     expenses: [],
     professionals: [],
+    advances: [],
   };
 }
 

@@ -6,7 +6,12 @@ import { Pencil, Plus, Trash2, UserRound } from "lucide-react";
 import { branches } from "@/features/branches/data/mock-branches";
 import { Card } from "@/shared/components/ui/card";
 import { notifyBusinessSnapshotUpdated } from "@/shared/lib/business-snapshot-events";
-import type { BranchId, Professional, ProfessionalCommissionMode } from "@/shared/types/business";
+import type {
+  BranchId,
+  Professional,
+  ProfessionalCommissionMode,
+  ProfessionalPaymentMode,
+} from "@/shared/types/business";
 
 type ProfessionalsAdminProps = {
   initialProfessionals: Professional[];
@@ -16,9 +21,14 @@ type ProfessionalFormState = {
   id?: string;
   name: string;
   role: string;
+  primaryRole: string;
+  secondaryRolesInput: string;
   branchIds: BranchId[];
   primaryBranchId: BranchId | "";
   active: boolean;
+  paymentMode: ProfessionalPaymentMode;
+  monthlySalary: number;
+  commissionsEnabled: boolean;
   commissionMode: ProfessionalCommissionMode;
   commissionValue: number;
   phone: string;
@@ -29,12 +39,39 @@ type ProfessionalFormState = {
   avatarColor: string;
 };
 
+const ROLE_SUGGESTIONS = [
+  "Instalador",
+  "Estilista",
+  "Colorista",
+  "Recepcionista",
+  "Contadora",
+  "Publicista",
+  "Socio",
+  "Otro",
+];
+
+const PRIMARY_ROLE_SUGGESTIONS = [
+  "instalador",
+  "estilista",
+  "colorista",
+  "recepcionista",
+  "contadora",
+  "publicista",
+  "socio",
+  "otro",
+];
+
 const emptyForm: ProfessionalFormState = {
   name: "",
   role: "Profesional",
+  primaryRole: "profesional",
+  secondaryRolesInput: "",
   branchIds: [],
   primaryBranchId: "",
   active: true,
+  paymentMode: "commission",
+  monthlySalary: 0,
+  commissionsEnabled: true,
   commissionMode: "system_rules",
   commissionValue: 0,
   phone: "",
@@ -60,9 +97,17 @@ function createProfessionalFromForm(form: ProfessionalFormState): Professional {
     id: normalizedId,
     name: form.name.trim(),
     role: form.role.trim() || "Profesional",
+    primaryRole: form.primaryRole.trim() || form.role.trim() || "profesional",
+    secondaryRoles: form.secondaryRolesInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
     branchIds: form.branchIds,
     primaryBranchId: form.primaryBranchId || form.branchIds[0] || null,
     active: form.active,
+    paymentMode: form.paymentMode,
+    monthlySalary: form.monthlySalary > 0 ? form.monthlySalary : undefined,
+    commissionsEnabled: form.commissionsEnabled,
     commissionMode: form.commissionMode,
     commissionValue:
       form.commissionMode === "system_rules" || form.commissionMode === "none"
@@ -88,9 +133,14 @@ function createFormFromProfessional(professional?: Professional | null): Profess
     id: professional.id,
     name: professional.name,
     role: professional.role,
+    primaryRole: professional.primaryRole ?? professional.role,
+    secondaryRolesInput: (professional.secondaryRoles ?? []).join(", "),
     branchIds: professional.branchIds,
     primaryBranchId: professional.primaryBranchId ?? professional.branchIds[0] ?? "",
     active: professional.active,
+    paymentMode: professional.paymentMode ?? "commission",
+    monthlySalary: professional.monthlySalary ?? 0,
+    commissionsEnabled: professional.commissionsEnabled ?? true,
     commissionMode: professional.commissionMode,
     commissionValue: professional.commissionValue ?? 0,
     phone: professional.phone ?? "",
@@ -100,6 +150,85 @@ function createFormFromProfessional(professional?: Professional | null): Profess
     notes: professional.notes ?? "",
     avatarColor: professional.avatarColor ?? "#7c6f4f",
   };
+}
+
+function suggestPaymentMode(role: string): ProfessionalPaymentMode {
+  const normalizedRole = role.toLowerCase().trim();
+
+  if (
+    normalizedRole.includes("recepcion") ||
+    normalizedRole.includes("contadora") ||
+    normalizedRole.includes("contador") ||
+    normalizedRole.includes("publicista") ||
+    normalizedRole.includes("marketing")
+  ) {
+    return "fixed_salary";
+  }
+
+  if (normalizedRole.includes("socio")) {
+    return "partner_draw";
+  }
+
+  return "commission";
+}
+
+function isPartnerRole(role: string) {
+  return role.toLowerCase().trim().includes("socio");
+}
+
+function shouldSuggestFixedSalary(role: string) {
+  const normalizedRole = role.toLowerCase().trim();
+
+  return (
+    normalizedRole.includes("recepcion") ||
+    normalizedRole.includes("contadora") ||
+    normalizedRole.includes("contador") ||
+    normalizedRole.includes("publicista") ||
+    normalizedRole.includes("marketing")
+  );
+}
+
+function applyRoleDefaults(
+  current: ProfessionalFormState,
+  nextRoleValue: string,
+  field: "role" | "primaryRole"
+): ProfessionalFormState {
+  const nextState: ProfessionalFormState = {
+    ...current,
+    [field]: nextRoleValue,
+  };
+
+  const combinedRoleHint =
+    field === "role"
+      ? nextRoleValue
+      : `${current.role} ${nextRoleValue}`.trim();
+
+  if (isPartnerRole(combinedRoleHint)) {
+    return {
+      ...nextState,
+      paymentMode: "partner_draw",
+      commissionsEnabled: false,
+      commissionMode: "none",
+      commissionValue: 0,
+      monthlySalary: 0,
+    };
+  }
+
+  if (
+    shouldSuggestFixedSalary(combinedRoleHint) &&
+    (current.paymentMode === emptyForm.paymentMode ||
+      current.paymentMode === "fixed_salary")
+  ) {
+    return {
+      ...nextState,
+      paymentMode: "fixed_salary",
+      commissionsEnabled: false,
+      commissionMode: "none",
+      commissionValue: 0,
+    };
+  }
+
+  return nextState;
 }
 
 function upsertProfessional(items: Professional[], professional: Professional) {
@@ -349,7 +478,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
         <div>
           <p className="text-sm font-semibold text-olive-950">Profesionales</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Administra instaladores, estilistas, coloristas y cualquier integrante del negocio sin dejar nombres fijos en el sistema.
+            Administra instaladores, estilistas, recepcionistas, socios y cualquier integrante del negocio sin dejar nombres fijos en el sistema.
           </p>
         </div>
 
@@ -433,8 +562,65 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
             <label className="space-y-2 text-sm">
               <span className="font-medium text-olive-950">Cargo / rol</span>
               <input
+                list="professional-role-options"
                 value={form.role}
-                onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => {
+                    const nextRole = event.target.value;
+                    const nextState = applyRoleDefaults(current, nextRole, "role");
+
+                    return {
+                      ...nextState,
+                      primaryRole:
+                        current.primaryRole === emptyForm.primaryRole ||
+                        current.primaryRole === current.role.toLowerCase().trim()
+                          ? nextRole.toLowerCase().trim()
+                          : nextState.primaryRole,
+                      paymentMode:
+                        current.id ||
+                        (current.paymentMode !== emptyForm.paymentMode &&
+                          current.paymentMode !== "fixed_salary" &&
+                          current.paymentMode !== "partner_draw")
+                          ? nextState.paymentMode
+                          : suggestPaymentMode(nextRole),
+                      commissionsEnabled:
+                        current.id || current.commissionsEnabled !== emptyForm.commissionsEnabled
+                          ? nextState.commissionsEnabled
+                          : suggestPaymentMode(nextRole) !== "fixed_salary" &&
+                            suggestPaymentMode(nextRole) !== "partner_draw",
+                    };
+                  })
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              />
+              <p className="text-xs text-muted-foreground">
+                Sugerencias: instalador, estilista, recepcionista, contadora, publicista o socio.
+              </p>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">Cargo principal</span>
+              <input
+                list="professional-primary-role-options"
+                value={form.primaryRole}
+                onChange={(event) =>
+                  setForm((current) =>
+                    applyRoleDefaults(current, event.target.value, "primaryRole")
+                  )
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">Roles secundarios</span>
+              <input
+                value={form.secondaryRolesInput}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    secondaryRolesInput: event.target.value,
+                  }))
+                }
+                placeholder="Ej: instalador, estilista"
                 className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
               />
             </label>
@@ -475,6 +661,103 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
               </select>
             </label>
             <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">Modalidad de pago</span>
+              <select
+                value={form.paymentMode}
+                onChange={(event) =>
+                  setForm((current) => {
+                    const nextPaymentMode = event.target.value as ProfessionalPaymentMode;
+
+                    if (nextPaymentMode === "partner_draw") {
+                      return {
+                        ...current,
+                        paymentMode: nextPaymentMode,
+                        commissionsEnabled: false,
+                        commissionMode: "none",
+                        commissionValue: 0,
+                        monthlySalary: 0,
+                      };
+                    }
+
+                    if (nextPaymentMode === "fixed_salary") {
+                      return {
+                        ...current,
+                        paymentMode: nextPaymentMode,
+                        commissionsEnabled: false,
+                        commissionMode: "none",
+                        commissionValue: 0,
+                      };
+                    }
+
+                    if (nextPaymentMode === "commission") {
+                      return {
+                        ...current,
+                        paymentMode: nextPaymentMode,
+                        commissionsEnabled: true,
+                        commissionMode:
+                          current.commissionMode === "none"
+                            ? "system_rules"
+                            : current.commissionMode,
+                      };
+                    }
+
+                    return {
+                      ...current,
+                      paymentMode: nextPaymentMode,
+                      commissionsEnabled: true,
+                      commissionMode:
+                        current.commissionMode === "none"
+                          ? "system_rules"
+                          : current.commissionMode,
+                    };
+                  })
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              >
+                <option value="commission">Solo comisión</option>
+                <option value="fixed_salary">Sueldo fijo</option>
+                <option value="mixed">Mixto</option>
+                <option value="partner_draw">Socio / retiro</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">Sueldo mensual</span>
+              <input
+                type="number"
+                min={0}
+                value={form.monthlySalary}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    monthlySalary: Number(event.target.value) || 0,
+                  }))
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-olive-950">¿Comisiona?</span>
+              <select
+                value={form.commissionsEnabled ? "yes" : "no"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    commissionsEnabled: event.target.value === "yes",
+                    commissionMode:
+                      event.target.value === "yes" && current.commissionMode === "none"
+                        ? "system_rules"
+                        : event.target.value === "no"
+                          ? "none"
+                          : current.commissionMode,
+                  }))
+                }
+                className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
+              >
+                <option value="yes">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
               <span className="font-medium text-olive-950">Tipo de comisión</span>
               <select
                 value={form.commissionMode}
@@ -484,6 +767,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
                     commissionMode: event.target.value as ProfessionalCommissionMode,
                   }))
                 }
+                disabled={!form.commissionsEnabled}
                 className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
               >
                 <option value="system_rules">Usar reglas del sistema</option>
@@ -505,6 +789,7 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
                     commissionValue: Number(event.target.value) || 0,
                   }))
                 }
+                disabled={!form.commissionsEnabled}
                 className="w-full rounded-2xl border border-olive-950/10 bg-white px-4 py-3"
               />
             </label>
@@ -575,6 +860,16 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <datalist id="professional-role-options">
+              {ROLE_SUGGESTIONS.map((role) => (
+                <option key={`role-suggestion-${role}`} value={role} />
+              ))}
+            </datalist>
+            <datalist id="professional-primary-role-options">
+              {PRIMARY_ROLE_SUGGESTIONS.map((role) => (
+                <option key={`primary-role-suggestion-${role}`} value={role} />
+              ))}
+            </datalist>
             <label className="flex items-center gap-3 text-sm text-olive-950">
               <span className="font-medium">Color / avatar</span>
               <input
@@ -650,7 +945,14 @@ export function ProfessionalsAdmin({ initialProfessionals }: ProfessionalsAdminP
 
               <div className="mt-4 space-y-1 text-sm text-muted-foreground">
                 <p>{branchLabels || "General"}</p>
+                <p>Pago: {professional.paymentMode ?? "commission"}</p>
                 <p>Comisión: {professional.commissionMode}</p>
+                {professional.monthlySalary ? (
+                  <p>Sueldo mensual: ${professional.monthlySalary.toLocaleString("es-CL")}</p>
+                ) : null}
+                {professional.secondaryRoles?.length ? (
+                  <p>Roles secundarios: {professional.secondaryRoles.join(" · ")}</p>
+                ) : null}
                 {professional.phone ? <p>{professional.phone}</p> : null}
                 {professional.emergencyPhone ? <p>Emergencia: {professional.emergencyPhone}</p> : null}
                 {professional.email ? <p>{professional.email}</p> : null}
