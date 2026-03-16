@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/notifications/hourly-reminder",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
+

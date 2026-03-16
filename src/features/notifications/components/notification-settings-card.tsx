@@ -12,6 +12,8 @@ const defaultPreferences = {
   alertPredictive: true,
   dailySummary: false,
   soundEnabled: true,
+  hourlyReminders: true,
+  changeNotifications: true,
 };
 
 export function NotificationSettingsCard() {
@@ -25,7 +27,7 @@ export function NotificationSettingsCard() {
     firebaseReady,
     registerDevice,
     sendLocalTestNotification,
-  } = usePushNotifications(defaultPreferences);
+  } = usePushNotifications(preferences);
 
   const permissionLabel = useMemo(() => {
     if (permission === "granted") {
@@ -108,6 +110,8 @@ export function NotificationSettingsCard() {
           { key: "alertImportant", label: "Recibir alertas importantes" },
           { key: "alertPredictive", label: "Recibir alertas predictivas" },
           { key: "dailySummary", label: "Recibir resumen diario" },
+          { key: "hourlyReminders", label: "Recordatorio cada hora (09:00 a 22:00)" },
+          { key: "changeNotifications", label: "Notificar cada modificación del sistema" },
           { key: "soundEnabled", label: "Activar sonido" },
         ].map((item) => (
           <label

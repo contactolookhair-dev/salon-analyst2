@@ -39,6 +39,8 @@ export async function POST(request: Request) {
         alertImportant: safeBoolean(body.alertImportant, true),
         alertPredictive: safeBoolean(body.alertPredictive, true),
         dailySummary: safeBoolean(body.dailySummary, false),
+        hourlyReminders: safeBoolean(body.hourlyReminders, true),
+        changeNotifications: safeBoolean(body.changeNotifications, true),
         soundEnabled: safeBoolean(body.soundEnabled, true),
       },
       update: {
@@ -51,6 +53,8 @@ export async function POST(request: Request) {
         alertImportant: safeBoolean(body.alertImportant, true),
         alertPredictive: safeBoolean(body.alertPredictive, true),
         dailySummary: safeBoolean(body.dailySummary, false),
+        hourlyReminders: safeBoolean(body.hourlyReminders, true),
+        changeNotifications: safeBoolean(body.changeNotifications, true),
         soundEnabled: safeBoolean(body.soundEnabled, true),
         lastSeenAt: new Date(),
       },

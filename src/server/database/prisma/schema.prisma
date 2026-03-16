@@ -149,6 +149,8 @@ model DeviceToken {
   alertImportant   Boolean  @default(true)
   alertPredictive  Boolean  @default(true)
   dailySummary     Boolean  @default(false)
+  hourlyReminders  Boolean  @default(true)
+  changeNotifications Boolean @default(true)
   soundEnabled     Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
